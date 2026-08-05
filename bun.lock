@@ -5,6 +5,20 @@
     "": {
       "name": "htmltodotmd",
     },
+    "packages/dotmdtohtml": {
+      "name": "dotmdtohtml",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@typescript-eslint/eslint-plugin": "^7.0.0",
+        "@typescript-eslint/parser": "^7.0.0",
+        "eslint": "^9.0.0",
+        "happy-dom": "^20.11.1",
+        "marked": "12.0.2",
+        "tsup": "^8.0.0",
+        "typescript": "^5.4.0",
+      },
+    },
     "packages/htmltodotmd": {
       "name": "htmltodotmd",
       "version": "0.2.0",
@@ -292,6 +306,8 @@
     "domhandler": ["domhandler@6.0.1", "", { "dependencies": { "domelementtype": "^3.0.0" } }, "sha512-gYzvtM72ZtxQO0T048kd6HWSbbGCNOUwcnfQ01cqIJ4X2IYKFFHZ5mKvrQETcFXxsRObZulDaKmy//R7TPtsBg=="],
 
     "domutils": ["domutils@4.0.2", "", { "dependencies": { "dom-serializer": "^3.0.0", "domelementtype": "^3.0.0", "domhandler": "^6.0.0" } }, "sha512-qI4JLRKnSzqFqr7hAlS5xQDusBCjKSEG4t4+7aNrIQMHBcsC2TGEhuyABJdYkgSewL57PNLYEiibY2iPKhKpaA=="],
+
+    "dotmdtohtml": ["dotmdtohtml@workspace:packages/dotmdtohtml"],
 
     "entities": ["entities@7.0.1", "", {}, "sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA=="],
 

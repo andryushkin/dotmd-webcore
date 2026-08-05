@@ -1,0 +1,45 @@
+{
+  "name": "dotmdtohtml",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./plain-text": {
+      "types": "./dist/plain-text.d.ts",
+      "default": "./dist/plain-text.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && bun scripts/pack-exports.ts",
+    "test": "bun test",
+    "lint": "eslint src tests",
+    "tsc": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^9.0.0",
+    "happy-dom": "^20.11.1",
+    "marked": "12.0.2",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andryushkin/dotmd-webcore.git",
+    "directory": "packages/dotmdtohtml"
+  },
+  "homepage": "https://github.com/andryushkin/dotmd-webcore",
+  "license": "MIT",
+  "description": "Renders the Markdown dotMD writes back to HTML: the parser profile, ==highlight==, maths placeholders, content gaps."
+}
