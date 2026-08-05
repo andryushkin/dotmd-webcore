@@ -25,6 +25,7 @@ import {
 } from './maths.js';
 import { renderMath, type KatexEngine, type MarkedConstructor, type Sanitize } from './engines.js';
 import { MARKED_PROFILE } from './profile.js';
+import { DOTMD_CLASS, DOTMD_SCHEMA_ATTR, DOTMD_SCHEMA_VERSION } from './schema.js';
 
 /**
  * A block a product puts into the note and wants shown as something else.
@@ -155,6 +156,24 @@ export function createMarkdownRenderer(options: RendererOptions): MarkdownRender
       mathExtension(current),
       contentGapExtension,
     ],
+    renderer: {
+      /**
+       * A task item, said out loud.
+       *
+       * `marked` writes the checkbox and leaves the `<li>` bare, so the only way
+       * to find one is to ask whether it has a checkbox in it — and that is what
+       * a product's stylesheet was doing, with `:has()`, where nothing said the
+       * renderer depended on it. A structural query is not a name: it cannot be
+       * versioned, it cannot be documented in a schema, and a theme written
+       * against it is a theme that has guessed. The checkbox stays where it is;
+       * this only lets a stylesheet say which item it belongs to.
+       */
+      listitem(text: string, task: boolean, checked: boolean): string {
+        if (!task) return `<li>${text}</li>\n`;
+        const done = checked ? ` ${DOTMD_CLASS.taskDone}` : '';
+        return `<li class="${DOTMD_CLASS.task}${done}">${text}</li>\n`;
+      },
+    },
   });
 
   const draw = (latex: string, display: boolean): string =>
@@ -178,7 +197,22 @@ export function createMarkdownRenderer(options: RendererOptions): MarkdownRender
     }
   }
 
+  /**
+   * The markup into the element, the formulas into the markup, and the element
+   * marked as what it now is.
+   *
+   * The class and the version go on here rather than being left to the consumer
+   * for the same reason the sanitizer is inside `render()`: a stylesheet has to
+   * have something to scope itself to, and "remember to put a class on the
+   * element" is a step that gets left out — after which nothing breaks and the
+   * document merely comes out unstyled. The element must be the *document*, not
+   * the product's scrolling shell: a shell owns a background, a border, padding
+   * and an overflow, a theme owns the same four, and one element wearing both
+   * roles is an argument with no way to settle it.
+   */
   function mount(container: Element, result: RenderResult): void {
+    container.classList.add(DOTMD_CLASS.root);
+    container.setAttribute(DOTMD_SCHEMA_ATTR, String(DOTMD_SCHEMA_VERSION));
     container.innerHTML = result.html;
     hydrateMath(container, result.math, draw);
   }

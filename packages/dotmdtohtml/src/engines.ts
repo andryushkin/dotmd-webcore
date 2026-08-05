@@ -38,7 +38,15 @@ export interface MarkedOptions {
  * told from a blank line inside a code fence.
  */
 export interface MarkedInstance {
-  use(extension: { extensions: readonly unknown[] }): unknown;
+  use(extension: {
+    extensions?: readonly unknown[];
+    /**
+     * An override for one of `marked`'s own renderers, which is how a tag it
+     * writes itself gets a class. Kept as loose as `extensions`: this package
+     * describes the two arguments it passes and models no more of the API.
+     */
+    renderer?: Record<string, unknown>;
+  }): unknown;
   lexer(src: string): unknown[];
   parser(tokens: unknown[]): string;
   parse(src: string, options?: { async: false }): string;

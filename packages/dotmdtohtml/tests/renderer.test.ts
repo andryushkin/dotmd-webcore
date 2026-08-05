@@ -138,7 +138,7 @@ describe('what the render shows', () => {
   });
 
   test('two blank lines are shown as a gap', () => {
-    expect(html('a\n\n\n\nb')).toContain('<div class="content-gap"></div>');
+    expect(html('a\n\n\n\nb')).toContain('<div class="dotmd-content-gap"></div>');
   });
 
   test.each([
@@ -147,11 +147,11 @@ describe('what the render shows', () => {
     ['after a fence', '```\nx\n```\n\n\n\nb'],
     ['after a rule', '---\n\n\n\nb'],
   ])('a gap survives the block that swallowed the blank lines: %s', (_name, md) => {
-    expect(html(md)).toContain('<div class="content-gap"></div>');
+    expect(html(md)).toContain('<div class="dotmd-content-gap"></div>');
   });
 
   test('one blank line is not a gap', () => {
-    expect(html('a\n\nb')).not.toContain('content-gap');
+    expect(html('a\n\nb')).not.toContain('dotmd-content-gap');
   });
 
   // A blockquote and a list hold blocks of their own, and the spacing the page
@@ -160,7 +160,7 @@ describe('what the render shows', () => {
     ['a blockquote', '> a\n>\n>\n>\n> b'],
     ['a list', '- a\n\n\n\n- b'],
   ])('the blank lines inside %s are a gap as well', (_name, md) => {
-    expect(html(md)).toContain('<div class="content-gap"></div>');
+    expect(html(md)).toContain('<div class="dotmd-content-gap"></div>');
   });
 
   // Two blank lines is two blank lines whoever holds the newlines. A blockquote
@@ -175,7 +175,7 @@ describe('what the render shows', () => {
     ['between ordered items', '1. a\n\n\n2. b'],
     ['inside a nested list', '- a\n  - b\n\n\n  - c'],
   ])('exactly two blank lines are a gap: %s', (_name, md) => {
-    expect(html(md)).toContain('<div class="content-gap"></div>');
+    expect(html(md)).toContain('<div class="dotmd-content-gap"></div>');
   });
 
   test.each([
@@ -183,7 +183,7 @@ describe('what the render shows', () => {
     ['between blockquotes', '> a\n\n> b'],
     ['between list items', '- a\n\n- b'],
   ])('one blank line is not, either: %s', (_name, md) => {
-    expect(html(md)).not.toContain('content-gap');
+    expect(html(md)).not.toContain('dotmd-content-gap');
   });
 });
 
@@ -341,7 +341,7 @@ describe('the maths pass is opaque to what is not prose', () => {
   // three newlines are three newlines somebody wrote.
   test('blank lines inside a fence stay blank lines', () => {
     expect(mounted('```js\na\n\n\nb\n```').textContent).toContain('a\n\n\nb');
-    expect(html('```js\na\n\n\nb\n```')).not.toContain('content-gap');
+    expect(html('```js\na\n\n\nb\n```')).not.toContain('dotmd-content-gap');
   });
 
   test('an indented block is not split in two by its own blank lines', () => {

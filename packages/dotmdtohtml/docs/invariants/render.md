@@ -48,7 +48,71 @@ a pair whose other end is there.
   `bun test` runs against `src/`, so nothing in the suite can tell whether the
   published package resolves at all. `scripts/pack-exports.ts` packs the tarball,
   unpacks it and imports every subpath out of it; it is the only thing that would
-  notice a name in `exports` pointing at a file the build never wrote.
+  notice a name in `exports` pointing at a file the build never wrote. The
+  stylesheets are subpaths on the same terms and the ones likeliest to go
+  missing: they are copied by `publicDir` rather than compiled from an entry, so
+  a rename in `styles/` leaves `exports` pointing at nothing and every other
+  check here passes. They are asked whether they are in the tarball and whether
+  they have any content, which is all a file a browser reads can be asked.
+
+## The document's styles
+
+Markup a theme cannot select on is markup a theme cannot style, so this package
+ships the stylesheets as well — `styles/base.css` and `styles/themes/*.css`, out
+under `dotmdtohtml/base.css` and `dotmdtohtml/themes/<id>.css`, with
+`DOTMD_THEMES` naming them for a product that offers a choice. Choosing is the
+product's, and none of it is here.
+
+- **`base.css` is not a theme and not optional.** Three of its rules are the
+  reason it exists: a display formula is a `<span>` and only `display: block`
+  puts it back on a line of its own; the blank lines a page left are an empty
+  `<div>` and only a height makes them worth anything; a task item's marker is
+  its checkbox and only `list-style-type: none` stops a bullet appearing beside
+  it. All three lived in a *product's* stylesheet, where nothing said the
+  renderer depended on them, and deleting any one changes the document silently
+  rather than breaking anything. A theme adds to this sheet; it never replaces
+  it, because a theme that had to restate all three is the arrangement that
+  already failed.
+- **The root is not the host.** `.dotmd-doc` is the document, nested inside
+  whatever the product scrolls. A shell owns a background, a border, padding and
+  an overflow; a theme owns the same four; one element wearing both roles is an
+  argument with no way to settle it. `mount()` writes the class and
+  `data-dotmd-schema` onto the element it renders into, rather than leaving a
+  consumer to remember — a forgotten class breaks nothing and merely leaves the
+  document unstyled.
+- **Four layers, declared in `base.css`**: `dotmd.host` for the product's rules
+  that reach in from outside and must lose, then `base`, `theme`, `product`.
+  Layer order beats specificity, which is the point: a product resets with a `*`
+  and a theme states a heading margin with two classes, and an unlayered `*`
+  wins. The panel's own reset went into `dotmd.host` for exactly that. Nothing in
+  the base sheet reads a value a theme has to have provided, so the order holds
+  with the theme layer empty.
+- **A theme carries both palettes, and a product's word beats the system's.**
+  Light and dark are one theme — a document that changed its typography when the
+  light did would be a different document twice a day — and
+  `[data-dotmd-color-scheme]` is written after the media query and with a
+  selector that outweighs it, so it wins on both counts rather than on file
+  order.
+- **Tokens are the public surface.** Every `--dotmd-*` has a default in
+  `base.css` meaning "whatever the host says", so an unthemed document reads like
+  the text around it. A product that wants the note to follow its own colours
+  overrides them in `dotmd.product`; the clipper overrides the two faces alone,
+  because a theme cannot name a font file it does not ship.
+- **A class only where the element cannot say what it is.** A highlight is a
+  `<mark>`, a heading an `<h2>`, a quotation a `<blockquote>`, and a second name
+  for something that already has one is a second thing to keep in step. What gets
+  a class is the formula, the gap, the task item and the root — and the task item
+  because the alternative was `:has(> input[type="checkbox"])` in somebody's
+  stylesheet, which is a structural query rather than a name: it cannot be
+  versioned and a theme written against it has guessed. `DOTMD_SCHEMA_VERSION`
+  moves when a name stops meaning what it meant, never when one is added.
+- **Two themes, because one proves nothing.** `reader` is the clipper panel's
+  document, extracted and checked back against it node for node; `paper` is
+  deliberately unlike it in every direction the contract has to survive — a face,
+  a rhythm in `em`, a background of its own, a highlight it draws itself, and its
+  own values for two tokens the base sheet gives defaults to. Anything `paper`
+  had needed from the base sheet, the markup or the product would have been a
+  boundary in the wrong place.
 
 ## The dialect
 
@@ -116,7 +180,9 @@ a pair whose other end is there.
   aside and reaches the DOM only through `hydrateMath()`, after the sanitizer. A
   `<div>` would open an HTML block that swallows the rest of the paragraph, and
   the blank lines around it would close the HTML block of a fallback table whose
-  cell holds the formula. The span is styled as a block by the consumer's CSS.
+  cell holds the formula. It carries `.dotmd-math--display`, and `base.css` is
+  what puts it back on a line of its own; the attribute that used to say so was
+  a private spelling of a class the schema now declares.
 - **The id carries a token drawn per render**, and the hydrator asks for that
   token rather than for `[data-katex]`. The ids were `0`, `1`, `2` in a
   module-wide map, and a note holding `<span data-katex="0">KEEP</span>` — markup

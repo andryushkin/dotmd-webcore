@@ -14,6 +14,14 @@
  * exist in the tarball and that the JavaScript half really imports — a module
  * with a runtime dependency this package is not allowed to have would fail here,
  * which is the other thing worth knowing about a published build.
+ *
+ * The stylesheets are subpaths too, and the ones most likely to go missing: they
+ * are not compiled from an entry but copied by `publicDir`, so a rename in
+ * `styles/` leaves `exports` pointing at nothing and every other check in this
+ * repository passes. They are asked the same question in the only form that
+ * means anything for a file a browser reads — is it in the tarball, and does it
+ * have any content — rather than being imported, which no runtime here would do
+ * with CSS.
  */
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -22,9 +30,15 @@ import { pathToFileURL } from 'node:url';
 
 const packageRoot = new URL('..', import.meta.url).pathname;
 
+/**
+ * A subpath is either a set of conditions or, for an asset, the path itself —
+ * both spellings npm accepts, and this package uses both.
+ */
+type Subpath = string | { types: string; default: string };
+
 interface Manifest {
   name: string;
-  exports: Record<string, { types: string; default: string }>;
+  exports: Record<string, Subpath>;
 }
 
 const manifest = JSON.parse(
@@ -65,15 +79,23 @@ try {
   // npm's own layout: everything in the tarball sits under `package/`.
   const root = join(work, 'package');
 
-  for (const [subpath, condition] of Object.entries(manifest.exports)) {
+  for (const [subpath, target] of Object.entries(manifest.exports)) {
     const name = `${manifest.name}${subpath.slice(1)}`;
-    for (const [kind, relative] of Object.entries(condition)) {
+    const conditions = typeof target === 'string' ? { default: target } : target;
+    for (const [kind, relative] of Object.entries(conditions)) {
       const path = join(root, relative);
-      if (!(await Bun.file(path).exists())) {
+      const file = Bun.file(path);
+      if (!(await file.exists())) {
         failures.push(`${name}: ${kind} → ${relative} is not in the tarball`);
         continue;
       }
       if (kind !== 'default') continue;
+      if (relative.endsWith('.css')) {
+        // A stylesheet is not imported, and an empty one is the failure worth
+        // catching: `publicDir` will happily copy a file somebody emptied.
+        if (file.size === 0) failures.push(`${name}: is in the tarball, but is empty`);
+        continue;
+      }
       try {
         const module = (await import(pathToFileURL(path).href)) as Record<string, unknown>;
         if (Object.keys(module).length === 0) {

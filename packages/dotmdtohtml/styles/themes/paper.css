@@ -1,0 +1,177 @@
+/**
+ * paper — the second theme, and the reason the first one is a theme rather than
+ * a stylesheet.
+ *
+ * A contract with one implementation is indistinguishable from the
+ * implementation. This one is deliberately unlike `reader` in every direction the
+ * contract has to survive: a serif face instead of the host's, a rhythm in `em`
+ * instead of pixels, a warm paper the document paints itself rather than the
+ * shell's surface showing through, its own highlight where `reader` leaves the
+ * one the user agent draws, and a different value for two of the tokens `base.css`
+ * gives defaults to. If any of that had needed a change in the base sheet, in the
+ * markup or in the product, the boundary would have been in the wrong place.
+ *
+ * It paints a background, which `reader` does not. That is the case worth having
+ * a second theme for: the document is nested in a shell whose colour is the
+ * product's, and a theme that wants its own has to be able to say so without the
+ * product agreeing to it first.
+ */
+
+@layer dotmd.theme {
+  .dotmd-doc {
+    --dotmd-font: Georgia, "Iowan Old Style", "Times New Roman", serif;
+
+    --dotmd-background: #fbf7ef;
+    --dotmd-text: #2b2620;
+    --dotmd-text-muted: #6f6558;
+    --dotmd-link: #8a4b1f;
+    --dotmd-border: #ded3c0;
+    --dotmd-surface: #f2ead9;
+    --dotmd-mark-background: #f6e6a8;
+    --dotmd-mark-text: #2b2620;
+
+    --dotmd-radius: 2px;
+    --dotmd-block-space: 0.85em;
+    --dotmd-heading-space: 1.6em;
+
+    /* Two of the base sheet's own defaults, moved: a theme adds to that sheet
+       and is allowed to disagree with it about spacing, which is the difference
+       between a rule that is load-bearing and a number that is taste. */
+    --dotmd-display-math-space: 1.2em;
+    --dotmd-content-gap-height: 1em;
+
+    line-height: 1.7;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .dotmd-doc {
+      --dotmd-background: #211d18;
+      --dotmd-text: #e6ddcd;
+      --dotmd-text-muted: #a2977f;
+      --dotmd-link: #d9a15f;
+      --dotmd-border: #3d362c;
+      --dotmd-surface: #2b251d;
+      --dotmd-mark-background: #6b5a24;
+      --dotmd-mark-text: #f5eddc;
+    }
+  }
+
+  :root[data-dotmd-color-scheme='light'] .dotmd-doc,
+  .dotmd-doc[data-dotmd-color-scheme='light'] {
+    --dotmd-background: #fbf7ef;
+    --dotmd-text: #2b2620;
+    --dotmd-text-muted: #6f6558;
+    --dotmd-link: #8a4b1f;
+    --dotmd-border: #ded3c0;
+    --dotmd-surface: #f2ead9;
+    --dotmd-mark-background: #f6e6a8;
+    --dotmd-mark-text: #2b2620;
+  }
+
+  :root[data-dotmd-color-scheme='dark'] .dotmd-doc,
+  .dotmd-doc[data-dotmd-color-scheme='dark'] {
+    --dotmd-background: #211d18;
+    --dotmd-text: #e6ddcd;
+    --dotmd-text-muted: #a2977f;
+    --dotmd-link: #d9a15f;
+    --dotmd-border: #3d362c;
+    --dotmd-surface: #2b251d;
+    --dotmd-mark-background: #6b5a24;
+    --dotmd-mark-text: #f5eddc;
+  }
+
+  .dotmd-doc :is(h1, h2, h3, h4, h5, h6) {
+    margin-top: var(--dotmd-heading-space);
+    margin-bottom: 0.4em;
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--dotmd-text);
+  }
+
+  .dotmd-doc h1 { font-size: 1.7em; }
+  .dotmd-doc h2 { font-size: 1.4em; }
+  .dotmd-doc h3 { font-size: 1.2em; }
+  .dotmd-doc :is(h4, h5, h6) { font-size: 1.05em; }
+
+  .dotmd-doc p {
+    margin-bottom: var(--dotmd-block-space);
+  }
+
+  .dotmd-doc a {
+    color: var(--dotmd-link);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+  }
+
+  /* `reader` leaves this to the user agent, which draws the same yellow whatever
+     the light is doing. A theme with a palette of its own has to draw it. */
+  .dotmd-doc mark {
+    background: var(--dotmd-mark-background);
+    color: var(--dotmd-mark-text);
+    padding: 0 0.15em;
+    border-radius: var(--dotmd-radius);
+  }
+
+  .dotmd-doc :is(ul, ol) {
+    padding-inline-start: 1.5em;
+    margin-bottom: var(--dotmd-block-space);
+  }
+
+  .dotmd-doc li {
+    margin-bottom: 0.25em;
+  }
+
+  .dotmd-doc blockquote {
+    border-inline-start: 2px solid var(--dotmd-border);
+    padding-inline-start: 1em;
+    margin: var(--dotmd-block-space) 0;
+    color: var(--dotmd-text-muted);
+  }
+
+  .dotmd-doc code {
+    font-family: var(--dotmd-font-mono);
+    font-size: 0.85em;
+    background: var(--dotmd-surface);
+    padding: 0.1em 0.3em;
+    border-radius: var(--dotmd-radius);
+  }
+
+  .dotmd-doc pre {
+    background: var(--dotmd-surface);
+    border: 1px solid var(--dotmd-border);
+    border-radius: var(--dotmd-radius);
+    padding: 0.8em;
+    margin-bottom: var(--dotmd-block-space);
+  }
+
+  .dotmd-doc pre code {
+    background: none;
+    padding: 0;
+    font-size: 0.85em;
+  }
+
+  .dotmd-doc hr {
+    border: none;
+    border-top: 1px solid var(--dotmd-border);
+    margin: var(--dotmd-heading-space) 0;
+  }
+
+  .dotmd-doc table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: var(--dotmd-block-space);
+    font-size: 0.95em;
+  }
+
+  .dotmd-doc :is(th, td) {
+    border: 1px solid var(--dotmd-border);
+    padding: 0.4em 0.6em;
+    text-align: start;
+  }
+
+  .dotmd-doc th {
+    background: var(--dotmd-surface);
+    font-weight: 600;
+  }
+}

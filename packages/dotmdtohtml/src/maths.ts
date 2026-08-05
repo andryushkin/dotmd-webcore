@@ -8,6 +8,8 @@
  * written.
  */
 
+import { DOTMD_CLASS } from './schema.js';
+
 /** One formula, kept aside while its placeholder travels through the sanitizer. */
 export interface MathEntry {
   latex: string;
@@ -157,10 +159,14 @@ function mathMarkup(run: MathRun, token: MathToken): string {
   // A span, not a div: a block element would open an HTML block that swallows
   // the rest of the paragraph, and the blank lines around it would end the
   // HTML block of a fallback table whose cell holds the formula. The span is
-  // styled as a block in CSS. It holds an id and never the LaTeX itself,
-  // which is why the LaTeX cannot become markup: it reaches the DOM only
-  // through `hydrateMath()`, after the sanitizer has run.
-  return `<span data-katex="${token.id}" data-display="${entry.display ? 1 : 0}"></span>`;
+  // put back on a line of its own by `base.css`, which is what the display
+  // class is for — nothing about a span says it stood alone in the note, and
+  // an attribute saying so was a second, private spelling of a class the
+  // schema now declares. It holds an id and never the LaTeX itself, which is
+  // why the LaTeX cannot become markup: it reaches the DOM only through
+  // `hydrateMath()`, after the sanitizer has run.
+  const kind = entry.display ? DOTMD_CLASS.mathDisplay : DOTMD_CLASS.mathInline;
+  return `<span data-katex="${token.id}" class="${DOTMD_CLASS.math} ${kind}"></span>`;
 }
 
 /**

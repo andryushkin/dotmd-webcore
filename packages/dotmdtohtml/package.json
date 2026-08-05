@@ -4,7 +4,9 @@
   "type": "module",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "sideEffects": false,
+  "sideEffects": [
+    "*.css"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,7 +15,10 @@
     "./plain-text": {
       "types": "./dist/plain-text.d.ts",
       "default": "./dist/plain-text.mjs"
-    }
+    },
+    "./base.css": "./dist/base.css",
+    "./themes/reader.css": "./dist/themes/reader.css",
+    "./themes/paper.css": "./dist/themes/paper.css"
   },
   "files": [
     "dist"

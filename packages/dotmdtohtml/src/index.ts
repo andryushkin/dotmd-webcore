@@ -47,3 +47,15 @@ export {
 // Markdown without rendering a document needs the extension and must not write a
 // second copy of it.
 export { markedHighlight } from './highlight.js';
+
+// What a stylesheet is allowed to select on, and which stylesheets there are.
+// The CSS itself is files under `dotmdtohtml/base.css` and
+// `dotmdtohtml/themes/*.css`; this is the part a program needs.
+export {
+  DOTMD_CLASS,
+  DOTMD_COLOR_SCHEME_ATTR,
+  DOTMD_SCHEMA_ATTR,
+  DOTMD_SCHEMA_VERSION,
+} from './schema.js';
+
+export { DOTMD_BASE_STYLESHEET, DOTMD_THEMES, type DotmdTheme } from './themes.js';

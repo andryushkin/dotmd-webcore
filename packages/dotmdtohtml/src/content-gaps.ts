@@ -8,6 +8,8 @@
  * file — two documents from one note.
  */
 
+import { DOTMD_CLASS } from './schema.js';
+
 export interface BlockToken {
   type: string;
   raw: string;
@@ -26,7 +28,10 @@ export interface BlockToken {
 export const contentGapExtension = {
   name: 'contentGap',
   renderer(): string {
-    return '<div class="content-gap"></div>';
+    // An element with no content at all: its whole contribution is the height
+    // `base.css` gives the class, which is why the name is the schema's and not
+    // a word chosen here.
+    return `<div class="${DOTMD_CLASS.contentGap}"></div>`;
   },
 };
 

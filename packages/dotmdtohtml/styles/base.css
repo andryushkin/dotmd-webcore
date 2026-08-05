@@ -1,0 +1,161 @@
+/**
+ * base.css — what a rendered note needs to be right, before anyone has an
+ * opinion about how it should look.
+ *
+ * Not a theme and not a default theme: a theme is loaded after this one and adds
+ * to it. Three of the rules below were, until this file existed, ordinary lines
+ * in a product's own stylesheet with nothing marking them as load-bearing —
+ * `span[data-display='1']`, `.content-gap` and the task item's marker. Delete any
+ * of them and nothing breaks: the display formula quietly stops being a block,
+ * the blank lines the page left are worth nothing, and a task item wears a bullet
+ * next to its checkbox. A document that is wrong rather than plain, and no error
+ * anywhere to say so. That is why the package that writes the markup ships them.
+ *
+ * ## The cascade
+ *
+ * Four layers, declared here because this file is the one a consumer must load:
+ *
+ *   dotmd.host     the product's rules that reach into the document from outside
+ *                  and must lose to it — a global `* { margin: 0 }` above all.
+ *   dotmd.base     this file.
+ *   dotmd.theme    the theme.
+ *   dotmd.product  the product's deliberate word on the document, last.
+ *
+ * Layer order beats specificity, which is the whole point: a product's reset is
+ * written with a `*` and a theme's heading margin with two classes, and without
+ * layers the `*` still wins if it is outside a layer. A product with nothing to
+ * say needs neither of its two layers, and the order holds with the theme layer
+ * empty as well — nothing here reads a value a theme has to have provided.
+ *
+ * ## The root, and what it is not
+ *
+ * `.dotmd-doc` is the document. It is *not* the product's scrolling shell — that
+ * element has a background, a border, padding, a height and an overflow of its
+ * own, and a stylesheet that tries to own both ends up arguing with the product
+ * over every one of them. The shell is the product's; everything inside is the
+ * document's. `mount()` writes the class and the schema version onto the element
+ * it renders into, so the two cannot drift apart.
+ *
+ * ## The tokens
+ *
+ * Every `--dotmd-*` below has a value that means "whatever the host says", so an
+ * unthemed document looks like the text around it rather than like nothing. A
+ * theme overrides them and uses them; a product may override them again in
+ * `dotmd.product` — that is what makes them public.
+ */
+
+@layer dotmd.host, dotmd.base, dotmd.theme, dotmd.product;
+
+@layer dotmd.base {
+  .dotmd-doc {
+    --dotmd-font: inherit;
+    --dotmd-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --dotmd-font-size: inherit;
+    --dotmd-line-height: inherit;
+
+    --dotmd-background: transparent;
+    --dotmd-text: inherit;
+    --dotmd-text-muted: inherit;
+    --dotmd-link: LinkText;
+    --dotmd-border: currentColor;
+    /* Behind a code span, a code block and a table heading. */
+    --dotmd-surface: transparent;
+    --dotmd-mark-background: Mark;
+    --dotmd-mark-text: MarkText;
+
+    --dotmd-radius: 0;
+    /* The rhythm: what one block leaves under itself. */
+    --dotmd-block-space: 0.5em;
+    /* …and what a heading leaves above itself. */
+    --dotmd-heading-space: 1em;
+
+    --dotmd-display-math-space: 0.75em;
+    --dotmd-content-gap-height: 0.5em;
+    --dotmd-task-offset: -4px;
+  }
+
+  /*
+   * An areal reset, because the alternative is a global one.
+   *
+   * A product resets its own UI with `*` and cannot help reaching in here; this
+   * says the same thing for the document's own subtree, in a layer the theme is
+   * allowed to beat. Without it the two arrangements differ: a product that
+   * resets globally flattens every margin a theme states, and a product that
+   * does not leaves the document with a user agent's idea of a heading.
+   */
+  .dotmd-doc,
+  .dotmd-doc *,
+  .dotmd-doc *::before,
+  .dotmd-doc *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  .dotmd-doc {
+    font-family: var(--dotmd-font);
+    font-size: var(--dotmd-font-size);
+    line-height: var(--dotmd-line-height);
+    color: var(--dotmd-text);
+    background: var(--dotmd-background);
+    /*
+     * A note is not necessarily written in the direction the product's interface
+     * runs, and the two must not reorder each other: the root isolates its own.
+     * Everything below is stated in logical properties for the same reason —
+     * a quotation's rule and a list's indent belong at the start of the line,
+     * whichever side that is.
+     */
+    unicode-bidi: isolate;
+    /*
+     * A captured URL is one word and can be longer than the panel is wide. Left
+     * alone it pushes the whole document sideways, and a reader who has to scroll
+     * right to read a paragraph is looking at a defect.
+     */
+    overflow-wrap: break-word;
+  }
+
+  /* What the page had room for, this document may not. */
+  .dotmd-doc :is(img, video, canvas) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /*
+   * A listing is the one thing that must not be re-wrapped — the line breaks are
+   * the program's — so it scrolls instead. `svg` is left out of the rule above
+   * for the neighbouring reason: a typesetter draws its own rules and radicals
+   * with explicit dimensions, and `height: auto` collapses them.
+   */
+  .dotmd-doc pre {
+    overflow-x: auto;
+  }
+
+  /*
+   * A formula travels as a `<span>`, because a `<div>` would open an HTML block
+   * and swallow the rest of the paragraph — and a span is inline, so this is the
+   * only thing that puts a display formula back on a line of its own.
+   */
+  .dotmd-doc .dotmd-math--display {
+    display: block;
+    margin-block: var(--dotmd-display-math-space);
+  }
+
+  /*
+   * The blank lines a page left: an empty element whose entire content is its
+   * height. Without this rule the run of blank lines the converter went to some
+   * trouble to keep is worth exactly nothing.
+   */
+  .dotmd-doc .dotmd-content-gap {
+    height: var(--dotmd-content-gap-height);
+  }
+
+  /*
+   * A task item's marker is its checkbox. Left alone it gets a bullet as well,
+   * and the checkbox hangs a marker's width to the right of every other item's
+   * text.
+   */
+  .dotmd-doc li.dotmd-task {
+    list-style-type: none;
+    margin-inline-start: var(--dotmd-task-offset);
+  }
+}
