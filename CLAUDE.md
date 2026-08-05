@@ -1,55 +1,76 @@
-# htmltodotmd — project notes
+# dotmd-webcore — project notes
 
-HTML → Markdown. Isomorphic by contract: a live DOM in a browser extension,
-linkedom in these tests, whatever a library caller brings. **Zero runtime
-dependencies** — that is not asceticism, it is the reason the engine can move
-into another product whole. Any dependency is an architecture change, discussed
-as one.
+Two packages, one repository.
 
-This repository is the library and nothing else. Its consumers are Chrome
-extensions that vendor it as a git submodule and import it **straight from
-source**, with no build step in between; the `tsup` build here serves a
-publication that has not happened yet.
+- **`packages/htmltodotmd`** — HTML → Markdown. Isomorphic by contract: a live
+  DOM in a browser extension, linkedom in its tests, whatever a library caller
+  brings. **Zero runtime dependencies** — not asceticism, the reason the engine
+  can move into another product whole. Any dependency is an architecture change,
+  discussed as one.
+- **`packages/pagetodotmd`** — everything that needs a browser and a layout
+  engine: the computed style recorded for a clone that has none, shadow trees,
+  hard breaks, the selection work, and the capture that orders them. It depends on
+  the converter and on nothing else.
+
+The repository is not the package. The two travel together because the second
+writes what the first reads — attribute names, thresholds, verdicts, all of which
+must have one spelling — and separate repositories would make every change to
+that protocol a window of incompatibility. The zero-dependency rule holds at the
+level of a package, and `htmltodotmd` still has none.
+
+The dependency between them goes through **public subpath exports only**
+(`htmltodotmd`, `/selection`, `/snapshot`), and `pagetodotmd/src/engine.ts` is the
+only file allowed to name them. Consumers are Chrome extensions that vendor this
+repository as a git submodule and import both **straight from source**, with no
+build step in between; the `tsup` builds here serve a publication that has not
+happened yet.
 
 If `DOTMD.md` sits at the repository root, read it before planning any change:
 private working notes, untracked here.
 
 ## Open the sheet before you edit (HARD)
 
-`docs/invariants/core.md` holds the rules of this library — output language,
-escaping, emphasis and style, reading a style, whitespace, rows drawn side by
-side, hiding, maths, blocks, code, tables, the package. Open it **before the
-first edit under `src/`**.
+Each package keeps its rules in a sheet of its own. Open the one covering the
+path **before the first edit under it**.
 
-Every rule in it is a defect somebody already shipped — a highlight that arrived
-missing, a heading with nothing above it, a formula that lost its level — and
-nothing in the code says so. The sheet is where the reason lives.
+| Path | Read first |
+| --- | --- |
+| `packages/htmltodotmd/src/` | `packages/htmltodotmd/docs/invariants/core.md` — output language, escaping, emphasis and style, reading a style, whitespace, rows drawn side by side, hiding, maths, blocks, code, tables, the package |
+| `packages/pagetodotmd/src/` | `packages/pagetodotmd/docs/invariants/page.md` — the package boundary, the namespace, selection, hard breaks, the snapshot, rows and lines, entities, the shadow copy |
 
-`docs/LIBRARY_SPEC.md` describes behaviour in full; `docs/CHROME_EXTENSION.md` is
-the integration guide; `docs/CONTRIBUTING.md` is for people arriving from an
-issue.
+Every rule in them is a defect somebody already shipped — a highlight that
+arrived missing, a heading with nothing above it, a formula that lost its level,
+a component's content drawn twice while a capture ran — and nothing in the code
+says so. The sheet is where the reason lives.
+
+`packages/htmltodotmd/docs/LIBRARY_SPEC.md` describes the converter's behaviour
+in full; `docs/CHROME_EXTENSION.md` beside it is the integration guide;
+`docs/CONTRIBUTING.md` is for people arriving from an issue.
 
 ## Build and test
 
 ```bash
-bun install        # once
-bun test           # the suite: 1378 tests
-bunx tsc --noEmit  # bun does not check types; this config is stricter than a consumer's
+bun install        # once, from this directory: a workspace of two packages
+bun test           # both suites
+bun run tsc        # per package; bun checks no types, and each config is
+                   # stricter than a consumer's
 bun run lint       # ESLint
-bun run build      # tsup → dist/, used only to publish
+bun run build      # tsup → dist/, per package, used only to publish
 ```
 
 `bun test` cannot see a browser. Everything that needs one — how a page's own CSS
 reads, what a selection leaves behind — is verified in the consumer, against a
 live page.
 
-## What lives here and what does not
+## What lives where
 
-A conversion defect belongs **here**, with a test in `tests/`, never patched
-around in a consumer: a repair made downstream leaves every other caller with the
-defect. Conversely, anything that needs a layout engine — `getComputedStyle`,
-measuring what stood on one line — belongs to the consumer that reads the live
-page, and arrives here as attributes on the nodes.
+A conversion defect belongs in `htmltodotmd`, with a test beside it, never
+patched around in a consumer: a repair made downstream leaves every other caller
+with the defect. Anything that needs a layout engine — `getComputedStyle`,
+measuring what stood on one line, a shadow tree, a `Selection` — belongs in
+`pagetodotmd` and arrives in the converter as attributes on the nodes. Neither
+package may touch an extension API: what a product decides is the product's, and
+it is handed over as options.
 
 The fidelity gate is not here either. It lives in the clipper, because its oracle
 depends on both this library and the extension's own options; it imports this
@@ -59,15 +80,24 @@ would let this side move while the oracle went on measuring the old one.
 
 ## Keep in sync (HARD)
 
-Each of these is a pair that spans a repository boundary, which is exactly why it
-can drift silently.
+Each of these is a pair that spans a package or a repository boundary, which is
+exactly why it can drift silently.
 
-- **A threshold or a reader here ⇄ the clipper's fidelity oracle.** It imports
-  them rather than restating them. Renaming one is a change on both sides.
-- **What the snapshot writes ⇄ what this library reads.** `paintedBackground()`
+- **A threshold or a reader in `htmltodotmd` ⇄ the clipper's fidelity oracle.**
+  It imports them rather than restating them. Renaming one is a change on both
+  sides.
+- **What `pagetodotmd` writes ⇄ what `htmltodotmd` reads.** `paintedBackground()`
   and `isMonospaced()` are one spelling for both sides; the relative size written
-  on every `role="heading"` is read here as an answer. The sheet says which rules
-  are halves of a pair.
+  on every `role="heading"` is read there as an answer. Both sheets say which
+  rules are halves of a pair, and the whole vocabulary is declared once, under the
+  `htmltodotmd/snapshot` subpath.
+- **A name crossing between the packages ⇄ `pagetodotmd/src/engine.ts` ⇄
+  `BOUNDARY` in its `tsup.config.ts`.** One file lists what crosses, one map turns
+  those paths into package specifiers when publishing, and
+  `scripts/publish-paths.ts` refuses to finish if a path reached `dist/` without
+  an entry — the only thing that would notice.
+- **A subpath in `exports` ⇄ an entry in `tsup.config.ts`.** Two halves of one
+  declaration: a name in `exports` alone resolves to a file the build never wrote.
 - **`marked` here ⇄ the copy the clipper vendors.** It is pinned to `12.0.2`
   because the tests use it to ask what the reader would actually see; two
   versions would let a test pass against a renderer nobody ships.

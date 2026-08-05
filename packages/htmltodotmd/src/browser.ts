@@ -5,7 +5,7 @@ import { normalize } from './core/normalizer.js';
 import { normalizeFragment } from './core/fragment.js';
 import { collectFootnoteDefs, buildFootnotesSection } from './core/footnotes.js';
 import { minHeadingLevel, resolveHeadingOffset } from './utils/headings.js';
-import { ROW_ATTR, statesConversion } from './utils/inline-style.js';
+import { ROW_ATTR, SNAPSHOT_ATTR, statesConversion } from './utils/inline-style.js';
 // The list rule's own question, asked here rather than spelled again: a second
 // reading of "whose checkbox is this" would drift the next time either moves.
 import { ownCheckbox } from './rules/lists.js';
@@ -49,16 +49,58 @@ function findAncestorElement(node: Node, tagName: string): Element | null {
 // from: a clone carries no such link, and every repair below needs one. Each
 // session is paired with a `finally` — touching the page's DOM is only safe when
 // the cleanup cannot be skipped.
-const ORIGIN_ATTR = 'data-s2md-origin';
-// A name of its own, not a second value under `ROW_ATTR`. The two say unrelated
-// things — one that a header row was found, one that a container's content was
-// drawn on a single line — and sharing a name meant every reader of either had
-// to know about the other: `laysARow` asks whether the attribute is *there*, so
-// a marked `<tr>` answered yes to a question about layout, and the wrap that
-// restores a measured row had to name the header value to refuse it. Nothing
-// was wrong while the marks came off in time; what was wrong is that the
-// distance between two unrelated facts was one `finally`.
-const ORIGIN_ROW_ATTR = 'data-s2md-origin-row';
+const DEFAULT_ORIGIN_ATTR = 'data-s2md-origin';
+const DEFAULT_ORIGIN_ROW_ATTR = 'data-s2md-origin-row';
+
+/**
+ * The names `enrichRange` uses on the **live** page, as a caller may respell them.
+ *
+ * Two of them this function writes: marks that go on for the length of one clone
+ * and come off in a `finally`. That makes them invisible in every ordinary use
+ * and exactly the wrong thing to hard-code once there are two consumers, because
+ * two captures running against one document write the same names to the same
+ * elements — and the second `finally` restores what the first had already
+ * changed.
+ *
+ * The other two it *reads*, and they are here for a defect the writing pair does
+ * not have. `wrapInRow` asks the live common ancestor whether a snapshot marked
+ * it as a row and whether its style says anything the conversion reads. Those
+ * two attributes were written by whoever holds the live nodes, under *their*
+ * names — so a consumer spelling them anything but the library's default got
+ * silence from both questions, and a drag across a sentence inside a flex row
+ * came back as one paragraph per item. That is the defect `wrapInRow` exists to
+ * prevent, reappearing for every consumer except the first.
+ *
+ * A parameter and never a module-level setting: a setting is what two consumers
+ * in one realm overwrite for each other, and the damage would show up nowhere
+ * near the call that did it.
+ */
+export interface PageMarks {
+  /** Written here: ties a clone back to the table or list item it came from. */
+  readonly origin: string;
+  /** Written here: the one row a table's conversion prints as its header. */
+  readonly originRow: string;
+  /** Read here: the recorded computed style — `SNAPSHOT_ATTR` by default. */
+  readonly style: string;
+  /** Read here: the row mark — `ROW_ATTR` by default. */
+  readonly row: string;
+}
+
+export const DEFAULT_PAGE_MARKS: PageMarks = Object.freeze({
+  origin: DEFAULT_ORIGIN_ATTR,
+  originRow: DEFAULT_ORIGIN_ROW_ATTR,
+  style: SNAPSHOT_ATTR,
+  row: ROW_ATTR,
+});
+
+// The row mark has a name of its own, not a second value under `ROW_ATTR`. The
+// two say unrelated things — one that a header row was found, one that a
+// container's content was drawn on a single line — and sharing a name meant
+// every reader of either had to know about the other: `laysARow` asks whether
+// the attribute is *there*, so a marked `<tr>` answered yes to a question about
+// layout, and the wrap that restores a measured row had to name the header value
+// to refuse it. Nothing was wrong while the marks came off in time; what was
+// wrong is that the distance between two unrelated facts was one `finally`.
 const HEADER_ROW_MARK = 'header';
 
 interface MarkSession {
@@ -164,18 +206,18 @@ function getTableHeaderRow(table: Element): Element | null {
  * comes off the table's other rows for the length of the capture: the page may
  * use the attribute itself, and a page value of `header` answered for ours.
  */
-function markTableHeader(table: Element, marks: MarkSession): Element | null {
+function markTableHeader(table: Element, marks: MarkSession, names: PageMarks): Element | null {
   const rows = getOwnRows(table);
   const header = rows[0] ?? null;
   for (const row of rows) {
-    if (row === header) marks.set(row, ORIGIN_ROW_ATTR, HEADER_ROW_MARK);
-    else marks.clear(row, ORIGIN_ROW_ATTR);
+    if (row === header) marks.set(row, names.originRow, HEADER_ROW_MARK);
+    else marks.clear(row, names.originRow);
   }
   return header;
 }
 
-function isMarkedHeader(row: Element): boolean {
-  return row.getAttribute(ORIGIN_ROW_ATTR) === HEADER_ROW_MARK;
+function isMarkedHeader(row: Element, names: PageMarks): boolean {
+  return row.getAttribute(names.originRow) === HEADER_ROW_MARK;
 }
 
 /**
@@ -197,6 +239,7 @@ function isMarkedHeader(row: Element): boolean {
 function collectFragmentRows(
   fragment: DocumentFragment,
   doc: Document,
+  names: PageMarks,
   sourceRow: Element | null = null,
 ): Element[] {
   const rows: Element[] = [];
@@ -234,8 +277,8 @@ function collectFragmentRows(
       // recognised as the header, so the header was restored *beside* it and the
       // file held it twice: once as the header, once as the only body row. The
       // mark travels from the row the cells were cut out of.
-      const mark = sourceRow?.getAttribute(ORIGIN_ROW_ATTR);
-      if (mark != null) tr.setAttribute(ORIGIN_ROW_ATTR, mark);
+      const mark = sourceRow?.getAttribute(names.originRow);
+      if (mark != null) tr.setAttribute(names.originRow, mark);
       for (const cell of cells) tr.appendChild(cell.cloneNode(true));
       rows.push(tr);
     }
@@ -289,7 +332,7 @@ function buildTableFragment(
  * Если шапка уже входит в выделение — не дублирует.
  * Если range не в таблице — возвращает null (использовать cloneContents()).
  */
-function tryEnrichTableFragment(range: Range): DocumentFragment | null {
+function tryEnrichTableFragment(range: Range, names: PageMarks): DocumentFragment | null {
   const ancestorTable = findAncestorElement(range.commonAncestorContainer, 'table');
   if (!ancestorTable) return null;
 
@@ -300,12 +343,13 @@ function tryEnrichTableFragment(range: Range): DocumentFragment | null {
   try {
     // Marked before cloning so the clone can be recognised as the header itself
     // rather than merely reading like it.
-    originalHeaderRow = markTableHeader(ancestorTable, marks);
+    originalHeaderRow = markTableHeader(ancestorTable, marks, names);
     // Read while the marks are on: a selection that lies inside one row leaves
     // the row itself outside the clone, and this is the only link back to it.
     selectedRows = collectFragmentRows(
       range.cloneContents(),
       doc,
+      names,
       findAncestorElement(range.commonAncestorContainer, 'tr'),
     );
   } finally {
@@ -316,8 +360,8 @@ function tryEnrichTableFragment(range: Range): DocumentFragment | null {
   // "Is the header already selected?" — by identity, not by text. Comparing
   // textContent called it selected whenever a body row happened to repeat the
   // header's words, and that body row was then promoted into the header and lost.
-  const selectedHeader = selectedRows.find(isMarkedHeader) ?? null;
-  for (const row of selectedRows) row.removeAttribute(ORIGIN_ROW_ATTR);
+  const selectedHeader = selectedRows.find((row) => isMarkedHeader(row, names)) ?? null;
+  for (const row of selectedRows) row.removeAttribute(names.originRow);
 
   if (selectedHeader) {
     // Шапка уже есть в выделении — оформляем корректную структуру
@@ -474,10 +518,14 @@ function addSiblingCaption(target: Element, ancestorPre: Element): void {
   if (caption) target.insertBefore(caption.cloneNode(true), target.firstChild);
 }
 
-function buildBlockquoteFragment(range: Range, ancestorBq: Element): DocumentFragment | null {
+function buildBlockquoteFragment(
+  range: Range,
+  ancestorBq: Element,
+  names: PageMarks,
+): DocumentFragment | null {
   // Through cloneWithContext, not cloneContents: a quoted table is still a
   // table, and picking the wrapper used to mean giving up on its header.
-  const rawFragment = cloneWithContext(range);
+  const rawFragment = cloneWithContext(range, names);
   if (!(rawFragment.textContent ?? '').trim()) return null;
 
   const doc = ancestorBq.ownerDocument!;
@@ -489,8 +537,12 @@ function buildBlockquoteFragment(range: Range, ancestorBq: Element): DocumentFra
   return frag;
 }
 
-function buildHeadingFragment(range: Range, ancestorH: Element): DocumentFragment | null {
-  const rawFragment = cloneWithContext(range);
+function buildHeadingFragment(
+  range: Range,
+  ancestorH: Element,
+  names: PageMarks,
+): DocumentFragment | null {
+  const rawFragment = cloneWithContext(range, names);
   if (!(rawFragment.textContent ?? '').trim()) return null;
 
   const doc = ancestorH.ownerDocument!;
@@ -524,7 +576,11 @@ function itemOrdinal(list: Element, index: number): number {
  * Restores the `<ol>`/`<ul>` around whatever of a list was selected: one item
  * caught by its `<li>` ancestor, or several caught by the list itself.
  */
-function buildListFragment(range: Range, ancestor: Element): DocumentFragment | null {
+function buildListFragment(
+  range: Range,
+  ancestor: Element,
+  names: PageMarks,
+): DocumentFragment | null {
   const doc = ancestor.ownerDocument!;
   const isItem = ancestor.tagName.toLowerCase() === 'li';
   const list = isItem ? ancestor.closest('ul, ol') : ancestor;
@@ -537,10 +593,10 @@ function buildListFragment(range: Range, ancestor: Element): DocumentFragment | 
     // the clone knows nothing of the items above it.
     if (ordered && !isItem) {
       ownListItems(list!).forEach((item, index) =>
-        marks.set(item, ORIGIN_ATTR, String(itemOrdinal(list!, index))),
+        marks.set(item, names.origin, String(itemOrdinal(list!, index))),
       );
     }
-    content = cloneWithContext(range);
+    content = cloneWithContext(range, names);
   } finally {
     marks.restore();
   }
@@ -551,9 +607,9 @@ function buildListFragment(range: Range, ancestor: Element): DocumentFragment | 
     ordinal = itemOrdinal(list!, ownListItems(list!).indexOf(ancestor));
   } else if (ordered) {
     const items = Array.from(content.querySelectorAll('li'));
-    const first = items.find((item) => item.getAttribute(ORIGIN_ATTR) !== null);
-    ordinal = first ? Number(first.getAttribute(ORIGIN_ATTR)) : null;
-    for (const item of items) item.removeAttribute(ORIGIN_ATTR);
+    const first = items.find((item) => item.getAttribute(names.origin) !== null);
+    ordinal = first ? Number(first.getAttribute(names.origin)) : null;
+    for (const item of items) item.removeAttribute(names.origin);
   }
 
   const listEl = doc.createElement(list?.tagName.toLowerCase() ?? 'ul');
@@ -602,7 +658,7 @@ const LIST_TAGS = new Set(['li', 'ul', 'ol']);
  * one owner at a time rather than in a sweep, so that a caller which set marks
  * of its own before calling can still read them afterwards.
  */
-function cloneWithContext(range: Range): DocumentFragment {
+function cloneWithContext(range: Range, names: PageMarks): DocumentFragment {
   const root = range.commonAncestorContainer;
   const doc = root.ownerDocument ?? (root as Document);
   const scope: ParentNode = (root.nodeType === 1 ? root : root.parentElement) as ParentNode;
@@ -614,26 +670,26 @@ function cloneWithContext(range: Range): DocumentFragment {
     // Marked before cloning, or the clone carries no mark and there is nothing
     // to match it back to.
     originals.forEach((table, index) => {
-      marks.set(table, ORIGIN_ATTR, String(index));
-      markTableHeader(table, marks);
+      marks.set(table, names.origin, String(index));
+      markTableHeader(table, marks, names);
     });
     for (const list of Array.from(scope.querySelectorAll('ol'))) {
       ownListItems(list).forEach((item, index) =>
-        marks.set(item, ORIGIN_ATTR, String(itemOrdinal(list, index))),
+        marks.set(item, names.origin, String(itemOrdinal(list, index))),
       );
     }
 
     const fragment = range.cloneContents();
 
     for (const clone of Array.from(fragment.querySelectorAll('table'))) {
-      const index = clone.getAttribute(ORIGIN_ATTR);
-      clone.removeAttribute(ORIGIN_ATTR);
+      const index = clone.getAttribute(names.origin);
+      clone.removeAttribute(names.origin);
       // Its own rows — a nested table's header does not answer for this one.
       const rows = getOwnRows(clone);
       // A header already in the selection needs nothing; one that was scrolled
       // past does.
-      const selected = rows.some(isMarkedHeader);
-      for (const row of rows) row.removeAttribute(ORIGIN_ROW_ATTR);
+      const selected = rows.some((row) => isMarkedHeader(row, names));
+      for (const row of rows) row.removeAttribute(names.originRow);
       if (index === null || selected) continue;
       const original = originals[Number(index)];
       const headerRow = original ? getTableHeaderRow(original) : null;
@@ -642,8 +698,8 @@ function cloneWithContext(range: Range): DocumentFragment {
       const thead = doc.createElement('thead');
       thead.appendChild(headerRow.cloneNode(true));
       const restored = thead.firstElementChild as Element | null;
-      restored?.removeAttribute(ORIGIN_ATTR);
-      restored?.removeAttribute(ORIGIN_ROW_ATTR);
+      restored?.removeAttribute(names.origin);
+      restored?.removeAttribute(names.originRow);
       clone.insertBefore(thead, clone.firstChild);
     }
 
@@ -651,12 +707,12 @@ function cloneWithContext(range: Range): DocumentFragment {
     // as if the selection had begun at the top of the list.
     for (const clone of Array.from(fragment.querySelectorAll('ol'))) {
       const items = ownListItems(clone);
-      const first = items.find((item) => item.getAttribute(ORIGIN_ATTR) !== null);
-      if (first) clone.setAttribute('start', first.getAttribute(ORIGIN_ATTR)!);
-      for (const item of items) item.removeAttribute(ORIGIN_ATTR);
+      const first = items.find((item) => item.getAttribute(names.origin) !== null);
+      if (first) clone.setAttribute('start', first.getAttribute(names.origin)!);
+      for (const item of items) item.removeAttribute(names.origin);
     }
 
-    return wrapInRow(fragment, scope, doc);
+    return wrapInRow(fragment, scope, doc, names);
   } finally {
     marks.restore();
   }
@@ -682,7 +738,12 @@ function cloneWithContext(range: Range): DocumentFragment {
  * mark says, selecting the container whole would have carried it, so a drag
  * inside must carry the same thing.
  */
-function wrapInRow(fragment: DocumentFragment, scope: ParentNode, doc: Document): DocumentFragment {
+function wrapInRow(
+  fragment: DocumentFragment,
+  scope: ParentNode,
+  doc: Document,
+  names: PageMarks,
+): DocumentFragment {
   const el = scope as Element;
   if (el.nodeType !== 1) return fragment;
   // A row's mark is one thing the box says and a style is the other, and both are
@@ -692,14 +753,16 @@ function wrapInRow(fragment: DocumentFragment, scope: ParentNode, doc: Document)
   // part is` for a line whose second half the reader saw bold. Selecting the whole
   // div was correct throughout, which is what makes this the commoner gesture of
   // the two going wrong.
-  if (el.getAttribute?.(ROW_ATTR) != null) return wrapIn(fragment, el, doc);
+  if (el.getAttribute?.(names.row) != null) return wrapIn(fragment, el, doc);
   // A style is worth the box back only where the box writes nothing of its own.
   // `highlightsToMd` selects the *contents* of whatever was clicked, so the
   // common ancestor there is the element itself — and a copy of an `<h3>` round
   // its own content is a heading inside a heading, which came out `### ### Section`.
   // These three carry a style and nothing else, which is the shape a card, a
   // paste from a word processor and every editor's wrapper write.
-  if (!STYLE_ONLY_BOXES.has(el.tagName?.toLowerCase()) || !statesConversion(el)) return fragment;
+  if (!STYLE_ONLY_BOXES.has(el.tagName?.toLowerCase()) || !statesConversion(el, names.style)) {
+    return fragment;
+  }
   return wrapIn(fragment, el, doc);
 }
 
@@ -748,22 +811,22 @@ function wrapInQuotes(fragment: DocumentFragment, from: Element): DocumentFragme
   return out;
 }
 
-function tryEnrichFragment(range: Range): DocumentFragment | null {
+function tryEnrichFragment(range: Range, names: PageMarks): DocumentFragment | null {
   const ancestor = findNearestSemanticAncestor(range.commonAncestorContainer);
   if (!ancestor) return null;
 
-  const built = buildFor(range, ancestor);
+  const built = buildFor(range, ancestor, names);
   return built === null ? null : wrapInQuotes(built, ancestor);
 }
 
-function buildFor(range: Range, ancestor: Element): DocumentFragment | null {
+function buildFor(range: Range, ancestor: Element, names: PageMarks): DocumentFragment | null {
   const tag = ancestor.tagName.toLowerCase();
 
   if (tag === 'pre') return buildPreFragment(range, ancestor);
-  if (HEADING_TAGS.has(tag)) return buildHeadingFragment(range, ancestor);
-  if (LIST_TAGS.has(tag)) return buildListFragment(range, ancestor);
-  if (TABLE_TAGS.has(tag)) return tryEnrichTableFragment(range);
-  if (tag === 'blockquote') return buildBlockquoteFragment(range, ancestor);
+  if (HEADING_TAGS.has(tag)) return buildHeadingFragment(range, ancestor, names);
+  if (LIST_TAGS.has(tag)) return buildListFragment(range, ancestor, names);
+  if (TABLE_TAGS.has(tag)) return tryEnrichTableFragment(range, names);
+  if (tag === 'blockquote') return buildBlockquoteFragment(range, ancestor, names);
 
   return null;
 }
@@ -783,8 +846,11 @@ function buildFor(range: Range, ancestor: Element): DocumentFragment | null {
  * the extension's content script builds its own fragment (it has to rewrite
  * newlines into `<br>` first) and so bypassed all of this.
  */
-export function enrichRange(range: Range): DocumentFragment {
-  return tryEnrichFragment(range) ?? cloneWithContext(range);
+export function enrichRange(
+  range: Range,
+  names: PageMarks = DEFAULT_PAGE_MARKS,
+): DocumentFragment {
+  return tryEnrichFragment(range, names) ?? cloneWithContext(range, names);
 }
 
 /**
@@ -838,7 +904,11 @@ export function offsetForTop(top: number | null, topLevel: number): number {
   return top === null ? 0 : Math.min(0, topLevel - top);
 }
 
-export function selectionToMarkdown(selection: Selection, options: MarkItDownOptions = {}): string {
+export function selectionToMarkdown(
+  selection: Selection,
+  options: MarkItDownOptions = {},
+  names: PageMarks = DEFAULT_PAGE_MARKS,
+): string {
   if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') return '';
 
   const first = selection.getRangeAt(0);
@@ -849,7 +919,7 @@ export function selectionToMarkdown(selection: Selection, options: MarkItDownOpt
   const container = doc.createElement('div');
   for (let i = 0; i < selection.rangeCount; i++) {
     const range = expandRangeToWordBoundaries(selection.getRangeAt(i));
-    const fragment = enrichRange(range);
+    const fragment = enrichRange(range, names);
     container.appendChild(fragment);
   }
 

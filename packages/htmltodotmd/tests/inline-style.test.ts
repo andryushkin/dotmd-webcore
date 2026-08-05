@@ -528,7 +528,7 @@ describe('the style attribute itself', () => {
 });
 
 // The second source of the same properties: a computed style someone with live
-// nodes wrote down before the clone was taken (`src/content/style-snapshot.ts`).
+// nodes wrote down before the clone was taken (`pagetodotmd`’s `style-snapshot.ts`).
 // It is read through the same parser and the same property readers, so what is
 // tested here is the joining — that it answers where the page's own attribute
 // cannot, and that it wins where both speak, computed style being the later word.

@@ -215,7 +215,7 @@ container leaves behind; the half that measures is the clipper's
   writes at all still parts its neighbours.
 - Which tags keep the whitespace their source wrote is `PRESERVE_WS` in `src/core/sanitizer.ts`, and
   it is half of a pair with the clipper: the other side rewrites the newlines a stylesheet drew into
-  `<br>` before this library is handed anything (`src/content/hard-breaks.ts`), and doing that inside
+  `<br>` before this library is handed anything (`pagetodotmd`’s `hard-breaks.ts`), and doing that inside
   one of these tags draws the break twice or puts a tag in the middle of a code sample. So the set is
   asked, through `preservesSourceWhitespace()`, and had been spelled out over there instead — under a
   comment naming this one, which is the drift that costs nothing until a tag is added here. A
@@ -449,7 +449,7 @@ threshold sits where no layout lands by accident.
   then normalized against.
 - The third of those is the one place a rule reads *silence* in a snapshot as an answer, and it can
   only do that because something positive says the drawing was read: the consumer's snapshot
-  (`src/content/style-snapshot.ts` in the clipper) writes the
+  (`pagetodotmd`’s `style-snapshot.ts`) writes the
   relative size on every element carrying the role, whether or not it differs, so `font-size:1em` is
   the declaration meaning "looked at, and ordinary". A ratio rather than a length, because 24px is a
   heading on one page and body text on another, and because the length it would be compared against
@@ -531,21 +531,38 @@ threshold sits where no layout lands by accident.
 
 ## Package
 
-This repository is the package (`htmltodotmd`), with its own `tsup` build, its own version, and its
-own `exports`. It has never been published — there is no npm release, and the consumers vendor it as
-a git submodule and import it from source, so the version in `package.json` currently numbers
-nothing and the `tsup` build serves a publication that has not happened. Four `data-s2md-*`
-attribute names are baked into its public surface (`SNAPSHOT_ATTR` and `ROW_ATTR` here,
-`ORIGIN_ATTR` and `ORIGIN_ROW_ATTR` in `src/browser.ts`); publishing this as a general library
-means making those a parameter first.
+This directory is the package (`htmltodotmd`), with its own `tsup` build, its own version and its
+own `exports`. The repository is not the package: `packages/pagetodotmd` is the other one, it reads
+a live page, and it is the second consumer of everything below. It has never been published — there
+is no npm release, and the consumers vendor the repository as a git submodule and import from
+source, so the version in `package.json` currently numbers nothing and the `tsup` build serves a
+publication that has not happened.
 
-Two subpaths stand beside the main entry, and each is there because a consumer needs one *piece*
-rather than the converter: `./fallback-tags` is the set of tags this library may emit, for a caller
-that has to tell its output from a page's text, and `./mathml` is the MathML fallback rule, which
-cannot be part of the main entry because it is inert without an implementation this package refuses
-to depend on. A subpath added to `exports` is added to `tsup.config.ts` in the same change — they
-are two halves of one declaration, and a name in `exports` alone resolves to a file the build never
-wrote.
+Four `data-s2md-*` attribute names used to be baked into the public surface. All four are now the
+`PageMarks` a caller may hand `enrichRange` — a parameter and never a module-level setting, because
+a setting is what two consumers in one realm overwrite for each other. Two of them it writes
+(`ORIGIN_ATTR`, `ORIGIN_ROW_ATTR` in `src/browser.ts`); the other two it *reads*, off the **live**
+common ancestor, in `wrapInRow` — which is why they had to be parameters too, and the only place in
+this library where that is true. `SNAPSHOT_ATTR` and `ROW_ATTR` are still the names read everywhere
+else, on the detached clone, and they are meant to be: a caller writing another name on the
+*live page* puts the converter's own names back on the clone before conversion
+(`pagetodotmd`'s `canonicalize()`), because the collision is on the page — two consumers writing at
+once — and a clone is private to one capture. Threading a name into `laysARow`, `drawnOnOneLine` and
+`statesConversion` instead would put a plumbing argument through the parser, the sanitizer, the
+flanking walk and four rules to say something the clone cannot disagree about.
+
+Four subpaths stand beside the main entry, and each is there because a consumer needs one *piece*
+rather than the converter. `./fallback-tags` is the set of tags this library may emit, for a caller
+that has to tell its output from a page's text. `./mathml` is the MathML fallback rule, inert
+without an implementation this package refuses to depend on. `./snapshot` is the whole protocol
+between this library and whoever holds live nodes — attribute names, thresholds, and the readers
+both sides must answer identically; it exists because the clipper reached those by a deep import
+into `src/utils/inline-style.ts`, which held only while the file kept its path. `./selection` is
+what a `Range` needs before it can be converted, and it answers a failure the main entry could not:
+`.` resolves to a different build per environment and the server build has no range surface at all,
+so `enrichRange` imported from `htmltodotmd` was a function in Chrome and `undefined` under Bun. A
+subpath added to `exports` is added to `tsup.config.ts` in the same change — they are two halves of
+one declaration, and a name in `exports` alone resolves to a file the build never wrote.
 
 A new observation buys a *value* of an existing name where the name already means that thing —
 `ONE_LINE_MARK` is why `ROW_ATTR` has two, one line being a kind of row — and a name of its own

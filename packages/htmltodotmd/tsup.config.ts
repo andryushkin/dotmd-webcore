@@ -11,6 +11,8 @@ export default defineConfig([
       browser: 'src/browser.ts',
       'fallback-tags': 'src/fallback-tags.ts',
       mathml: 'src/mathml.ts',
+      selection: 'src/selection.ts',
+      snapshot: 'src/snapshot.ts',
     },
     format: ['esm'],
     outExtension: () => ({ js: '.mjs' }),

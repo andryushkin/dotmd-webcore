@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    // ES2022 rather than the converter's ES2020, and `DOM.Iterable` beside
+    // `DOM`: this package holds live nodes. `Intl.Segmenter` is how a title is
+    // truncated without splitting an emoji, and a `NodeList` and a `DOMRectList`
+    // are walked directly — neither is iterable in the older library.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist"
+  },
+  "include": ["src", "tests"]
+}

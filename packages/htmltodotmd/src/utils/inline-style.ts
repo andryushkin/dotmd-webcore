@@ -8,7 +8,7 @@
  * extension, and neither has a layout engine, so a rule that needed it would hold
  * in one half of the product and not the other. What a class or a stylesheet says
  * is invisible from a clone for the same reason, which is why the side that does
- * have live nodes writes it down first — see `src/content/style-snapshot.ts`. No
+ * have live nodes writes it down first — see `pagetodotmd`’s `style-snapshot.ts`. No
  * snapshot is the ordinary case, not an error: the library converts a string for
  * callers that never had a browser.
  *
@@ -33,7 +33,7 @@ export const SNAPSHOT_ATTR = 'data-s2md-style';
 
 /**
  * The mark a content script leaves on a container whose children the reader saw
- * side by side — a flex or grid row (`src/content/style-snapshot.ts`).
+ * side by side — a flex or grid row (`pagetodotmd`’s `style-snapshot.ts`).
  *
  * It is not a `display` and is deliberately not written as one: the snapshot
  * stays silent about the `block` such a container derives onto its items,
@@ -68,7 +68,7 @@ export const ONE_LINE_MARK = 'line';
  * a `<dt>` and a `<blockquote>` each carry something their own rule spells — a
  * bullet, a column, a term, a `>` — and a line has nowhere to put it, so a `<ul>`
  * laid along one line stays a list. A heading is absent for the reason
- * `declinesBlock` gives in `core/src/core/parser.ts`: the level is what a heading
+ * `declinesBlock` gives in `core/packages/htmltodotmd/src/core/parser.ts`: the level is what a heading
  * is, no `display` can spell it, and a measurement says where the text was drawn
  * rather than what it was.
  *
@@ -348,7 +348,7 @@ export function sizeFrom(read: StyleReader): number | undefined {
  * That is what `em` means on `font-size` and only on `font-size`: the property
  * resolves against the *inherited* size rather than its own, so this is ordinary
  * CSS saying exactly the thing a heading has to be judged by. A snapshot writes
- * it that way for the same reason — see `src/content/style-snapshot.ts`, which
+ * it that way for the same reason — see `pagetodotmd`’s `style-snapshot.ts`, which
  * has the two computed sizes in hand and hands over the ratio rather than a pair
  * of lengths the clone would have to find each other by.
  *
@@ -762,10 +762,10 @@ const AFFECTS_BOX = /display/i;
 // these two are asked before any of the work they gate, so they have to be
 // cheaper than it. Neither can answer *what* the style says, only that it is on
 // the subject.
-function states(el: Element, properties: RegExp): boolean {
+function states(el: Element, properties: RegExp, snapshotAttr = SNAPSHOT_ATTR): boolean {
   const raw = el.getAttribute?.('style');
   if (raw != null && properties.test(raw)) return true;
-  const snapshot = el.getAttribute?.(SNAPSHOT_ATTR);
+  const snapshot = el.getAttribute?.(snapshotAttr);
   return snapshot != null && properties.test(snapshot);
 }
 
@@ -778,8 +778,8 @@ function states(el: Element, properties: RegExp): boolean {
  * declarations, for a `color` no rule here has ever read. A page is full of
  * those.
  */
-export function statesConversion(el: Element): boolean {
-  return states(el, AFFECTS_CONVERSION);
+export function statesConversion(el: Element, snapshotAttr = SNAPSHOT_ATTR): boolean {
+  return states(el, AFFECTS_CONVERSION, snapshotAttr);
 }
 
 /**

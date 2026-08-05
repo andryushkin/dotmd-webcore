@@ -1,90 +1,21 @@
 {
-  "name": "htmltodotmd",
-  "version": "0.2.0",
+  "name": "dotmd-webcore",
+  "private": true,
   "type": "module",
-  "main": "./dist/server.cjs",
-  "types": "./dist/server.d.ts",
-  "sideEffects": false,
-  "exports": {
-    ".": {
-      "browser": {
-        "types": "./dist/browser.d.ts",
-        "default": "./dist/browser.mjs"
-      },
-      "bun": {
-        "types": "./dist/server.d.ts",
-        "default": "./dist/server.mjs"
-      },
-      "node": {
-        "import": {
-          "types": "./dist/server.d.ts",
-          "default": "./dist/server.mjs"
-        },
-        "require": {
-          "types": "./dist/server.d.cts",
-          "default": "./dist/server.cjs"
-        }
-      },
-      "default": {
-        "types": "./dist/server.d.ts",
-        "default": "./dist/server.mjs"
-      }
-    },
-    "./fallback-tags": {
-      "types": "./dist/fallback-tags.d.ts",
-      "default": "./dist/fallback-tags.mjs"
-    },
-    "./mathml": {
-      "types": "./dist/mathml.d.ts",
-      "default": "./dist/mathml.mjs"
-    }
-  },
-  "files": [
-    "dist"
+  "description": "Workspace root: the conversion engine and the live-page reader that feeds it",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "bun run --filter '*' build",
     "test": "bun test",
-    "coverage": "bun test --coverage",
-    "lint": "eslint src tests",
-    "lint:fix": "eslint src tests --fix",
-    "tsc": "tsc --noEmit",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "benchmark": "bun bench/index.ts",
-    "size-check": "bun run build && bun scripts/size-check.ts",
-    "publint": "bunx publint",
-    "attw": "bunx @arethetypeswrong/cli --pack ."
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/node": "^25.5.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "eslint": "^9.0.0",
-    "happy-dom": "^20.11.1",
-    "linkedom": "^0.18.12",
-    "marked": "12.0.2",
-    "prettier": "^3.2.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.4.0"
-  },
-  "peerDependencies": {
-    "linkedom": "",
-    "happy-dom": ">=14"
-  },
-  "peerDependenciesMeta": {
-    "linkedom": {
-      "optional": true
-    },
-    "happy-dom": {
-      "optional": true
-    }
+    "lint": "bun run --filter '*' lint",
+    "tsc": "bun run --filter '*' tsc"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/andryushkin/dotmd-webcore.git"
   },
-  "homepage": "https://github.com/andryushkin/dotmd-webcore",
-  "description": "HTML to Markdown converter. Zero dependencies, works in the browser, Node.js and Bun."
+  "homepage": "https://github.com/andryushkin/dotmd-webcore"
 }
