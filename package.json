@@ -33,6 +33,10 @@
     "./fallback-tags": {
       "types": "./dist/fallback-tags.d.ts",
       "default": "./dist/fallback-tags.mjs"
+    },
+    "./mathml": {
+      "types": "./dist/mathml.d.ts",
+      "default": "./dist/mathml.mjs"
     }
   },
   "files": [

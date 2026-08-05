@@ -175,6 +175,44 @@ const md = selectionToMarkdown(selection, {
 });
 ```
 
+### MathML with no LaTeX (`htmltodotmd/mathml`)
+
+The math rules read LaTeX a page already carries — an `<annotation
+encoding="application/x-tex">`, a `<script type="math/tex">`, Wikipedia's
+`alttext`. A `<math>` carrying none of those converts as the glyphs its children
+are (`a+b`), which is what arXiv, LaTeXML and any hand-written MathML give you.
+
+Deriving LaTeX from the structure needs a converter, and this library takes no
+dependencies. It declares the type and you supply the implementation:
+
+```typescript
+import { toMarkdown } from 'htmltodotmd';
+import { createMathMLFallbackRule } from 'htmltodotmd/mathml';
+import { MathMLToLaTeX } from 'mathml-to-latex';
+
+const md = toMarkdown(fragment, {
+  math: true,
+  rules: [createMathMLFallbackRule((mathml) => MathMLToLaTeX.convert(mathml))],
+});
+```
+
+The converter is synchronous, is given the serialized element (`outerHTML`) and
+returns **bare** LaTeX — no `$` or `$$`, since only the rule knows whether the
+page said display. Returning an empty or whitespace-only string is a refusal, and
+so is throwing: either way the MathML converts as its glyphs rather than
+vanishing. Supply no rule at all and you get the same glyph fallback.
+
+The rule refuses a `<math>` the page states LaTeX for, and one a renderer drew a
+visible half beside — a KaTeX, MathJax or Wikipedia formula is two records of one
+thing, and writing both puts `$\frac{a}{b}$ab` where the reader saw one fraction.
+Do not write a MathML rule of your own instead: rules you pass are consulted
+*before* every rule in this library, so yours would claim those carriers first.
+
+Pass it with `math: true`. Rules you supply run whatever that flag says, but the
+half that silences the carrier beside a drawing is this library's own rule, which
+`math: false` switches off — so with maths off the MathML converts beside the
+drawing, exactly as it does when you supply no rule at all.
+
 ## Manifest V3 checklist
 
 - [ ] Add `"clipboardWrite"` permission if writing to clipboard from content script

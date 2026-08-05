@@ -381,9 +381,7 @@ threshold sits where no layout lands by accident.
   itself, leaving `before  after` where the sentence had held `a+b`. Both renderers really ship
   the wrapper shape: KaTeX
   with `output: "html"` builds no MathML at all, and MathJax v3 emits assistive MathML only with
-  the accessibility extension loaded; the bare one is any page that writes MathML by hand, and the
-  clipper only escapes it because a rule of its own (`src/content/raw-mathml-rule.ts`) claims such a
-  `<math>` first — a library caller had nothing.
+  the accessibility extension loaded; the bare one is any page that writes MathML by hand.
   `math: true` was returning less than `math: false` on all of them,
   which is the one direction the setting must never take. What the page drew is then converted as
   the glyphs it is — `E=mc2` for `E=mc^2`, a level lost and no character missing — because a
@@ -415,6 +413,25 @@ threshold sits where no layout lands by accident.
   fallback is the same pair with no renderer's name on it. Different again from `drawnText(<math>)`,
   which is empty on purpose: a carrier standing alone has no drawn half to offer, and the emptiness
   answers about the carrier rather than about the pair.
+- MathML stating no formula is the one thing this package will not answer alone, and what it takes
+  from a caller is a *type*: `src/mathml.ts` builds the rule round a converter that caller supplies
+  (`createMathMLFallbackRule`), because deriving LaTeX from the structure is thousands of lines and
+  a dependency here is an architecture change, discussed as one. Synchronous, given `outerHTML`,
+  handing back **bare** LaTeX — the delimiters are this package's to write, since only it knows
+  whether the page said display — and blank is a refusal, which is the rule `statedLatex()` already
+  states about a carrier. Every way it can fail ends with the children the reader met and never with
+  the empty string: the version that lived in the clipper returned `''` on a throw, deleting MathML
+  the page had shown. No converter, no rule — a caller that supplies none gets the glyph fallback
+  above, a level lost and no character missing, where an optional parameter would have spelled that
+  same outcome as a capability which is present and declines.
+- It belongs here rather than in the consumer because of the order rules are asked in: `findRule`
+  puts `options.rules` ahead of every rule in this package, so a consumer's MathML rule claims a
+  `<math>` before `math-element` can ask anything. It did, for as long as it lived there. The day
+  the pair question was added here, a KaTeX formula with no annotation was still coming back
+  `$\frac{a}{b}$ab` in the clipper, and MathJax v3's assistive MathML and Wikipedia's picture
+  fallback were doubled the same way — the repair reached the library and stopped at its edge. The
+  filter asks `extractMath()` and `hasDrawnTwin()`, which is what those two are exported for: a
+  second spelling of either would not merely drift, it would move the question out of this file.
 
 ## Blocks
 
@@ -521,6 +538,14 @@ nothing and the `tsup` build serves a publication that has not happened. Four `d
 attribute names are baked into its public surface (`SNAPSHOT_ATTR` and `ROW_ATTR` here,
 `ORIGIN_ATTR` and `ORIGIN_ROW_ATTR` in `src/browser.ts`); publishing this as a general library
 means making those a parameter first.
+
+Two subpaths stand beside the main entry, and each is there because a consumer needs one *piece*
+rather than the converter: `./fallback-tags` is the set of tags this library may emit, for a caller
+that has to tell its output from a page's text, and `./mathml` is the MathML fallback rule, which
+cannot be part of the main entry because it is inert without an implementation this package refuses
+to depend on. A subpath added to `exports` is added to `tsup.config.ts` in the same change — they
+are two halves of one declaration, and a name in `exports` alone resolves to a file the build never
+wrote.
 
 A new observation buys a *value* of an existing name where the name already means that thing —
 `ONE_LINE_MARK` is why `ROW_ATTR` has two, one line being a kind of row — and a name of its own

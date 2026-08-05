@@ -15,7 +15,7 @@ import {
 // writes `true` onto the container. Asked of the wrong element, each answers about
 // nothing: `=== 'true'` on a `<math>` never matched, so a Wikipedia display formula
 // came out inline.
-function isDisplay(el: Element): boolean {
+export function isDisplay(el: Element): boolean {
   const math = el.tagName.toLowerCase() === 'math' ? el : el.querySelector('math');
   if (math?.getAttribute('display') === 'block') return true;
   // A renderer's wrapper says it too, and is the only witness where the MathML is
@@ -133,7 +133,14 @@ function readMath(el: Element): { latex: string; display: boolean } | null {
 // `alttext` *and* in an `<annotation>`, branch 1 answers first, and every formula
 // on the page reached the file wrapped. KaTeX renders `{\displaystyle E=mc^{2}}` as
 // the formula, so the panel looked right and only the saved file was wrong.
-function extractMath(el: Element): { latex: string; display: boolean } | null {
+//
+// Exported, with `isDisplay` and `hasDrawnTwin`, because `src/mathml.ts` builds a
+// rule that has to refuse exactly what `math-element` below claims. A consumer's
+// rule runs *before* every rule here, so a second reading of "does the page state
+// a formula" or "did a renderer draw one beside this" would not merely drift — it
+// would take the question away from this file altogether, which is how the
+// duplicate this package repaired went on shipping in the clipper.
+export function extractMath(el: Element): { latex: string; display: boolean } | null {
   const read = readMath(el);
   if (!read) return null;
   return { latex: unwrapRenderStyle(read.latex), display: read.display };
@@ -231,7 +238,7 @@ function drawnBeside(el: Element, drawn: string): boolean {
  * place: that is a page writing MathML by hand beside a fallback, and no renderer's
  * name is on it, so any of the three drawings answers.
  */
-function hasDrawnTwin(el: Element): boolean {
+export function hasDrawnTwin(el: Element): boolean {
   for (const [box, drawn] of DRAWN_PAIRS) {
     const boxed = el.closest(box);
     if (boxed && drawnBeside(boxed, drawn)) return true;
