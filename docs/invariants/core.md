@@ -334,7 +334,14 @@ threshold sits where no layout lands by accident.
 - A carrier is what a rule can read a formula *out of*, never any MathML: an assistive twin with no
   annotation is not one, and reading it as one made MathJax v2 write the formula twice — once from
   the twin the extension's own MathML rule then converted, once from the `<script>` that always
-  carried it. Where a renderer puts a picture beside the twin, the duplication is settled on the
+  carried it. Neither is a carrier holding nothing. An `<annotation>` of whitespace and a `math/tex`
+  script a renderer emptied are the shape without the statement, and each was read as a formula
+  successfully extracted: `$$` went into the file where the reader saw a formula, and
+  `ignoresChildContent` took the rest of the carrier's subtree with it. `statedLatex()` is the trim
+  that says so, and it is one spelling in `src/rules/math.ts` for both readers — the rules ask it
+  what to write, the sanitizer asks it what an invisible box carries, and two definitions would
+  spare a box there that the rules then had nothing to write from.
+  Where a renderer puts a picture beside the twin, the duplication is settled on the
   *wrapper* — `.katex`, `<mjx-container>`, `.mwe-math-element` each have a rule that ignores its
   children — because the wrapper is the only element that knows the two are one formula. A rule that
   merely refused the `<img>` would have to be taught every further fallback the renderer adds.
@@ -357,16 +364,33 @@ threshold sits where no layout lands by accident.
   and italics gone, because glyph spans carry no spaces. It buys the rule that the file says what
   the screen said.
 - Every one of those three claims its wrapper only where it can *read* a formula there, and the
-  class alone is never enough. Claiming it with nothing to read returns the empty string, and
+  `<math>` rule is the fourth on that same guard: the class, and the tag, are never enough on their
+  own. Claiming with nothing to read returns the empty string, and
   ignoring the children then takes the drawing with it — so the wrapper of a formula whose LaTeX
-  the page never carried deleted what the reader saw. Both renderers really ship that shape: KaTeX
+  the page never carried deleted what the reader saw, and a bare `<math>` deleted the formula
+  itself, leaving `before  after` where the sentence had held `a+b`. Both renderers really ship
+  the wrapper shape: KaTeX
   with `output: "html"` builds no MathML at all, and MathJax v3 emits assistive MathML only with
-  the accessibility extension loaded. `math: true` was returning less than `math: false` on both,
+  the accessibility extension loaded; the bare one is any page that writes MathML by hand, and the
+  clipper only escapes it because a rule of its own (`src/content/raw-mathml-rule.ts`) claims such a
+  `<math>` first — a library caller had nothing.
+  `math: true` was returning less than `math: false` on all of them,
   which is the one direction the setting must never take. What the page drew is then converted as
   the glyphs it is — `E=mc2` for `E=mc^2`, a level lost and no character missing — because a
   rendered formula read back off the screen is the *only* thing left, and it is not a formula: a
   `\frac{a}{b}` measures as `ba`, the denominator standing first in the DOM with CSS putting the
   numerator above it. Which is why this is a fallback and never the source.
+- Letting the bare `<math>` convert is what makes the *pair* a question, and it has to be asked
+  before the MathML writes anything: inside a renderer's wrapper the carrier is the meaning half of
+  a formula the page also drew, and both halves measure the same — a `\frac{a}{b}` reads `ab` off
+  the MathML and `ab` off the drawing, so a reader who saw one fraction would get `abab`. The
+  wrapper is asked, not the `.katex-mathml`/`<mjx-assistive-mml>` box the carrier sits in, because
+  the drawn half is that box's *sibling*: the same three wrappers, for the same reason they settle
+  the duplication above. Where the wrapper drew no text there is nothing to duplicate — Wikipedia's
+  `<img>` fallback is the real case — and the MathML converts, exactly as `math: false` converts it.
+  That is a different question from `drawnText(<math>)`, which is empty on purpose: a carrier
+  standing alone has no drawn half to offer, and the emptiness answers about the carrier rather than
+  about the pair.
 
 ## Blocks
 

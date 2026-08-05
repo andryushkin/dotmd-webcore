@@ -1,6 +1,7 @@
 import { isContentless } from './contentful.js';
 import { liftCodeHeaders } from '../rules/code.js';
 import { hidingVerdict, type Hiding } from '../utils/inline-style.js';
+import { statedLatex, TEX_ANNOTATION } from '../rules/math.js';
 // `<iframe>` is not here any more: it is how a page embeds a player, and deleting
 // it took every YouTube video on every blog out of the capture silently. The
 // media rule writes the link (`src/rules/inline.ts`), and the address is all that
@@ -169,7 +170,6 @@ function removeHidden(root: SanitizeRoot, math: boolean): void {
   }
 }
 
-const TEX_ANNOTATION = 'annotation[encoding="application/x-tex"]';
 const MATH_CARRIER_SELECTOR = `math[alttext], ${TEX_ANNOTATION}, script[type^="math/tex"]`;
 
 /**
@@ -183,13 +183,27 @@ const MATH_CARRIER_SELECTOR = `math[alttext], ${TEX_ANNOTATION}, script[type^="m
  * already. Keeping that twin put a second copy of the same formula in the file,
  * `$E = m c^{2}$$E=mc^2$` where the reader saw one. The `<script>` needs no
  * sparing of its own: `removeScripts` has done it long before this pass asks.
+ *
+ * `statedLatex` rather than a selector, because "can read" is a question about
+ * the text and not about the shape: a blank annotation is the shape without the
+ * formula, and reading it as a carrier spared an invisible box the rules then
+ * had nothing to write from. It is imported rather than restated so the two
+ * sides cannot drift — the rule that skips such a box and the pass that keeps it
+ * are one decision.
  */
 function isMathCarrier(el: Element): boolean {
-  const tag = el.tagName.toLowerCase();
-  if (tag === 'annotation') return el.getAttribute('encoding') === 'application/x-tex';
-  if (tag === 'script') return (el.getAttribute('type') ?? '').startsWith('math/tex');
-  if (tag !== 'math') return false;
-  return el.hasAttribute('alttext') || el.querySelector?.(TEX_ANNOTATION) != null;
+  if (statedLatex(el) !== null) return true;
+  // A `<math>` is the one carrier that can hold its formula rather than state it.
+  return el.tagName.toLowerCase() === 'math' && carrierUnder(el);
+}
+
+// A carrier stating a formula somewhere below this element. Every match is
+// asked, not the first: a wrapper holding a blank annotation beside a real one
+// carries the formula, and the first match alone would answer for the wrong one.
+function carrierUnder(el: Element): boolean {
+  const found = el.querySelectorAll?.(MATH_CARRIER_SELECTOR);
+  if (!found) return false;
+  return Array.from(found).some((carrier) => statedLatex(carrier) !== null);
 }
 
 // Whether everything this element holds is carried by maths — no glyph of its
@@ -239,7 +253,7 @@ function showsOnlyMath(el: Element): boolean {
  */
 function carriesMath(el: Element): boolean {
   if (isMathCarrier(el)) return true;
-  if (el.querySelector?.(MATH_CARRIER_SELECTOR) == null) return false;
+  if (!carrierUnder(el)) return false;
   return showsOnlyMath(el);
 }
 

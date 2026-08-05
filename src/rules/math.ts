@@ -76,22 +76,52 @@ function unwrapRenderStyle(latex: string): string {
   return body.trim() || latex;
 }
 
+export const TEX_ANNOTATION = 'annotation[encoding="application/x-tex"]';
+
+/**
+ * The LaTeX a carrier *states*, or null where it states none.
+ *
+ * Blank is not a statement, and the trim is the whole of what says so. Both
+ * spellings ship: an `<annotation encoding="application/x-tex">` holding
+ * whitespace, and a `<script type="math/tex">` a renderer emptied after reading
+ * it. Each was read as a formula successfully extracted — `$$` went into the
+ * file where the reader saw a formula, and `ignoresChildContent` took the rest
+ * of the carrier's subtree with it, so `math: true` returned less than
+ * `math: false` on the same markup.
+ *
+ * One spelling for both readers: the sanitizer decides what an invisible box
+ * carries with this same question (`isMathCarrier` in `src/core/sanitizer.ts`),
+ * and a second definition would let a box be spared as a carrier here and read
+ * as empty there.
+ */
+export function statedLatex(el: Element): string | null {
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'annotation') {
+    if (el.getAttribute('encoding') !== 'application/x-tex') return null;
+    return (el.textContent ?? '').trim() || null;
+  }
+  if (tag === 'script') {
+    if (!(el.getAttribute('type') ?? '').startsWith('math/tex')) return null;
+    return (el.textContent ?? '').trim() || null;
+  }
+  if (tag === 'math') return (el.getAttribute('alttext') ?? '').trim() || null;
+  return null;
+}
+
 function readMath(el: Element): { latex: string; display: boolean } | null {
   // 1. <annotation encoding="application/x-tex"> — KaTeX, MathJax v3, Wikipedia
-  const annotation = el.querySelector('annotation[encoding="application/x-tex"]');
-  if (annotation?.textContent) {
-    return { latex: annotation.textContent.trim(), display: isDisplay(el) };
-  }
+  const annotation = el.querySelector(TEX_ANNOTATION);
+  const annotated = annotation ? statedLatex(annotation) : null;
+  if (annotated) return { latex: annotated, display: isDisplay(el) };
   // 2. MathJax v2: <script type="math/tex">
   if (el.tagName.toLowerCase() === 'script') {
+    const script = statedLatex(el);
     const type = el.getAttribute('type') ?? '';
-    if (type.startsWith('math/tex')) {
-      return { latex: el.textContent?.trim() ?? '', display: type.includes('mode=display') };
-    }
+    if (script) return { latex: script, display: type.includes('mode=display') };
   }
   // 3. Wikipedia <math alttext="...">
   if (el.tagName.toLowerCase() === 'math') {
-    const alttext = el.getAttribute('alttext');
+    const alttext = statedLatex(el);
     if (alttext) return { latex: alttext, display: isDisplay(el) };
   }
   return null;
@@ -142,6 +172,31 @@ function drawnText(el: Element): string {
     carrier.remove();
   }
   return (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+// The three renderer wrappers — the same three that have a rule of their own
+// below, and the only elements that know a carrier and a drawing are one formula.
+const RENDERER_WRAPPER = '.katex, mjx-container, .mwe-math-element';
+
+/**
+ * Whether this carrier stands inside a wrapper that drew the formula as well.
+ *
+ * The question a bare `<math>` has to answer once it is allowed to convert at
+ * all. Where nothing else was drawn it is the only witness of the formula and
+ * its children are what the reader met; where a renderer drew a half beside it,
+ * those same children are the second copy of one formula — `\frac{a}{b}` measures
+ * as `ab`, and the file said `abab` where the page showed one fraction. The
+ * wrapper is asked, not the `.katex-mathml`/`mjx-assistive-mml` box the carrier
+ * sits in, because the drawn half is that box's sibling and only the wrapper
+ * holds both.
+ *
+ * Empty is an answer: a Wikipedia wrapper whose fallback is the `<img>` draws no
+ * text at all, so there is nothing for the MathML to duplicate and it converts —
+ * which is what `math: false` does with the same markup.
+ */
+function hasDrawnTwin(el: Element): boolean {
+  const wrapper = el.closest(RENDERER_WRAPPER);
+  return wrapper !== null && drawnText(wrapper) !== '';
 }
 
 /**
@@ -238,10 +293,22 @@ export const MATH_RULES: Rule[] = [
     },
     replacement: (el) => wrapperOutput(el),
   },
+  // The carrier itself, where no wrapper claimed it first. The filter asks the
+  // same question the three above do, and for the same reason: claiming a `<math>`
+  // with nothing to read returned the empty string, and `ignoresChildContent`
+  // then deleted the MathML the reader was shown — `<math><mrow><mi>a</mi>
+  // <mo>+</mo><mi>b</mi></mrow></math> in a sentence` came back as the sentence
+  // with a hole in it, while the same capture with `math` off kept `a+b`.
+  //
+  // Where it has no formula to state it converts as the glyphs its children are,
+  // exactly as `math: false` converts them — a level lost, no character missing.
+  // The second half of the filter is what keeps that from doubling a formula a
+  // renderer drew beside the carrier.
   {
     name: 'math-element',
     ignoresChildContent: true,
-    filter: (el) => el.tagName.toLowerCase() === 'math',
+    filter: (el) =>
+      el.tagName.toLowerCase() === 'math' && (extractMath(el) !== null || hasDrawnTwin(el)),
     replacement: (el) => wrapperOutput(el),
   },
 ];

@@ -537,6 +537,127 @@ describe('обёртка без читаемого LaTeX', () => {
   });
 });
 
+// Turning maths on may cost the reader characters — a level, a fraction bar — and
+// never text. Four shapes returned less than the very same capture with the
+// setting off: a bare `<math>` deleted whole, a blank annotation read as a formula
+// successfully extracted, an emptied `math/tex` script writing `$$` over the
+// drawing, and — the trap under the repair — the drawn half doubled by the MathML
+// once the bare `<math>` was allowed to convert at all.
+//
+// Each case asserts twice on purpose. The exact string fixes the prose around the
+// formula and whether it opened a line; the comparison with `math: false` fixes
+// the class, which is about the two settings and not about any one shape.
+describe('math: true never returns less than math: false', () => {
+  const both = (html: string) => [toMarkdown(html, { math: true }), toMarkdown(html, {})];
+
+  const mathml = '<math><mrow><mi>a</mi><mo>+</mo><mi>b</mi></mrow></math>';
+
+  // MathML nobody annotated: the shape KaTeX never writes and a hand-written page
+  // does. It carries no formula this library can read, so what is left is the
+  // glyphs — the same glyphs `math: false` writes, in the same place.
+  it.each([
+    ['inline', `<p>before ${mathml} after</p>`, 'before a+b after\n'],
+    [
+      'block',
+      `<p>before</p><math display="block"><mrow><mi>a</mi><mo>+</mo><mi>b</mi></mrow></math>` +
+        '<p>after</p>',
+      'before\n\na+b\n\nafter\n',
+    ],
+  ])('bare MathML converts as its glyphs: %s', (_name, html, expected) => {
+    const [on, off] = both(html);
+    expect(on).toBe(expected);
+    expect(on).toBe(off);
+  });
+
+  // Blank is the shape of a carrier without the formula in it. Read as a formula,
+  // it wrote `$$` and `ignoresChildContent` took the MathML beside it, so the file
+  // held two dollars where the page held an `a`.
+  it('an annotation of whitespace is not a formula', () => {
+    const html =
+      '<p>x <math><semantics><annotation encoding="application/x-tex">   </annotation>' +
+      '<mrow><mi>a</mi></mrow></semantics></math> y</p>';
+    const [on, off] = both(html);
+    expect(on).not.toContain('$');
+    expect(on).toContain('a');
+    expect(on).toBe(off);
+  });
+
+  // The same emptiness in MathJax v2's spelling, and there the drawing stood
+  // beside it: `x $$a+b y` — two dollars in the middle of a sentence.
+  it('an emptied math/tex script is not a formula', () => {
+    const html =
+      '<p>x <span class="katex"><script type="math/tex"></script>' +
+      '<span class="katex-html">a+b</span></span> y</p>';
+    const [on, off] = both(html);
+    expect(on).toBe('x a+b y\n');
+    expect(on).toBe(off);
+  });
+});
+
+// The regression the repair above would otherwise buy. A wrapper whose LaTeX
+// cannot be read does not claim its subtree, so both halves of the formula
+// convert: the MathML the renderer keeps for a screen reader and the glyphs it
+// drew for the eye. `\frac{a}{b}` measures as `ab` on both sides, and the reader
+// who saw one fraction got `abab`.
+//
+// Settled on the wrapper, because it is the only element that knows the two are
+// one formula — see «обёртка без читаемого LaTeX» above for the other half of the
+// same trade.
+describe('an unreadable wrapper writes one copy, the drawn one', () => {
+  const carrier = '<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>';
+
+  it.each([
+    [
+      'KaTeX without an annotation',
+      `<span class="katex"><span class="katex-mathml">${carrier}</span>` +
+        '<span class="katex-html">ab</span></span>',
+    ],
+    [
+      'MathJax v3 assistive MathML carrying no TeX',
+      '<mjx-container class="MathJax" jax="CHTML"><mjx-math>ab</mjx-math>' +
+        `<mjx-assistive-mml>${carrier}</mjx-assistive-mml></mjx-container>`,
+    ],
+    [
+      'Wikipedia beside the source fallback',
+      '<span class="mwe-math-element"><span class="mwe-math-mathml-a11y">' +
+        `${carrier}</span><span class="mwe-math-fallback-source-inline">ab</span></span>`,
+    ],
+  ])('%s', (_name, html) => {
+    expect(toMarkdown(`<p>x ${html} y</p>`, { math: true })).toBe('x ab y\n');
+  });
+
+  // And where the LaTeX *is* readable nothing about that changed: one formula,
+  // written as the formula, with the drawing it was rendered into left out.
+  it.each([
+    [
+      'annotation, inline',
+      '<span class="katex"><span class="katex-mathml"><math><semantics>' +
+        '<annotation encoding="application/x-tex">\\frac{a}{b}</annotation>' +
+        '</semantics></math></span><span class="katex-html">ab</span></span>',
+      'x $\\frac{a}{b}$ y\n',
+    ],
+    [
+      'annotation, display',
+      '<span class="katex"><span class="katex-mathml"><math display="block"><semantics>' +
+        '<annotation encoding="application/x-tex">\\frac{a}{b}</annotation>' +
+        '</semantics></math></span><span class="katex-html">ab</span></span>',
+      'x $$\\frac{a}{b}$$ y\n',
+    ],
+    [
+      'alttext, inline',
+      '<math alttext="\\frac{a}{b}"><mfrac><mi>a</mi><mi>b</mi></mfrac></math>',
+      'x $\\frac{a}{b}$ y\n',
+    ],
+    [
+      'alttext, display',
+      '<math display="block" alttext="\\frac{a}{b}"><mfrac><mi>a</mi><mi>b</mi></mfrac></math>',
+      'x $$\\frac{a}{b}$$ y\n',
+    ],
+  ])('a readable source is still one formula: %s', (_name, html, expected) => {
+    expect(toMarkdown(`<p>x ${html} y</p>`, { math: true })).toBe(expected);
+  });
+});
+
 // Строка, не использующая ни одной возможности LaTeX, — не формула, а текст,
 // который кто-то прогнал через рендерер. Такую страница рисует сама, и что
 // нарисовано, читатель и видел: annotation `x <x-foo style="position:fixed">X</
