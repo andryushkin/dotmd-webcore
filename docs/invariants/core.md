@@ -393,14 +393,28 @@ threshold sits where no layout lands by accident.
 - Letting the bare `<math>` convert is what makes the *pair* a question, and it has to be asked
   before the MathML writes anything: inside a renderer's wrapper the carrier is the meaning half of
   a formula the page also drew, and both halves measure the same — a `\frac{a}{b}` reads `ab` off
-  the MathML and `ab` off the drawing, so a reader who saw one fraction would get `abab`. The
-  wrapper is asked, not the `.katex-mathml`/`<mjx-assistive-mml>` box the carrier sits in, because
-  the drawn half is that box's *sibling*: the same three wrappers, for the same reason they settle
-  the duplication above. Where the wrapper drew no text there is nothing to duplicate — Wikipedia's
-  `<img>` fallback is the real case — and the MathML converts, exactly as `math: false` converts it.
-  That is a different question from `drawnText(<math>)`, which is empty on purpose: a carrier
-  standing alone has no drawn half to offer, and the emptiness answers about the carrier rather than
-  about the pair.
+  the MathML and `ab` off the drawing, so a reader who saw one fraction would get `abab`. The pair
+  is asked of the *named* branch beside the carrier's box, never of the wrapper's text. Each
+  renderer writes both halves and names both — `.katex-mathml` beside `.katex-html`,
+  `<mjx-assistive-mml>` beside `<mjx-math>`, a `mwe-math-mathml-*` box beside whichever
+  `mwe-math-fallback-*` the extension published — and all three write them next to each other, so
+  the box's adjacent siblings answer it and a half standing further off is answered "no twin",
+  which keeps the MathML rather than deleting it. Reading the wrapper's text instead let *anything*
+  written there answer for a drawing: a caption, a copy button, an equation number, or the drawing
+  of a different formula in a wrapper nested inside — `<span class="katex"><math><mi>a</mi></math>
+  <span>note</span></span>` lost the `a` outright, which is the one direction this setting must
+  never take. It cost a clone, a sweep and a full `textContent` of the wrapper per carrier as well:
+  400 bare carriers under one wrapper took 111 ms, and 13 ms once the question became local.
+- Whether a drawing *exists* and whether it writes characters are two questions, and the carrier
+  asks the first. Wikipedia draws most of its formulas as an `<img>`, which has no `textContent`:
+  read as "nothing was drawn", the MathML converted beside a picture of the same formula, and one
+  fraction reached the file twice — `ab![a over b](…)`, the second record carrying the LaTeX in its
+  alt text. What the drawn half writes is that half's own rule to answer. This is the one place
+  turning maths on takes characters away, and what goes is a second record of a formula the file
+  keeps. A carrier no renderer boxed stands where the box would: MathML written by hand beside a
+  fallback is the same pair with no renderer's name on it. Different again from `drawnText(<math>)`,
+  which is empty on purpose: a carrier standing alone has no drawn half to offer, and the emptiness
+  answers about the carrier rather than about the pair.
 
 ## Blocks
 

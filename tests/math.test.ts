@@ -658,6 +658,140 @@ describe('an unreadable wrapper writes one copy, the drawn one', () => {
   });
 });
 
+// Which text in the wrapper is the formula drawn. Asking the wrapper for whatever
+// text it held that was not a carrier answered "the formula was drawn" for a
+// caption, a copy button, an equation number and the drawing of a *different*
+// formula nested inside it — and the MathML was deleted as the second copy of
+// something nobody had drawn. A renderer names both of its halves, so the pair is
+// asked of the named branch beside the carrier's box and of nothing else.
+describe('the drawn half is a named branch, not any text in the wrapper', () => {
+  const both = (html: string) => [
+    toMarkdown(`<p>x ${html} y</p>`, { math: true }),
+    toMarkdown(`<p>x ${html} y</p>`, {}),
+  ];
+
+  const carrier = '<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>';
+
+  // A wrapper holding a carrier and something written about it, but no drawing:
+  // the carrier is still the only witness of the formula, so it converts as its
+  // glyphs, exactly as `math: false` converts it.
+  it.each([
+    [
+      'a caption beside a KaTeX carrier',
+      `<span class="katex">${carrier}<span class="katex-caption">note</span></span>`,
+      'x abnote y\n',
+    ],
+    [
+      'a caption beside a MathJax carrier',
+      `<mjx-container>${carrier}<span>note</span></mjx-container>`,
+      'x abnote y\n',
+    ],
+    [
+      'an equation number beside a Wikipedia carrier',
+      `<span class="mwe-math-element">${carrier}<span class="mwe-math-number">(1)</span></span>`,
+      'x ab(1) y\n',
+    ],
+  ])('text that is not the drawing does not claim the pair: %s', (_name, html, expected) => {
+    const [on, off] = both(html);
+    expect(on).toBe(expected);
+    expect(on).toBe(off);
+  });
+
+  // A wrapper inside a wrapper: the inner one drew its own formula, and that
+  // drawing used to answer for the outer carrier as well — `a` left the file
+  // because `b` had been drawn. Each pair now answers for itself, so the outer
+  // carrier converts and the inner one writes the drawn copy alone.
+  it('a nested wrapper answers for its own carrier only', () => {
+    const html =
+      '<span class="katex"><span class="katex-mathml"><math><mi>a</mi></math></span>' +
+      '<span class="katex"><span class="katex-mathml"><math><mi>b</mi></math></span>' +
+      '<span class="katex-html">B</span></span></span>';
+    const [on, off] = both(html);
+    expect(on).toBe('x aB y\n');
+    expect(off).toBe('x abB y\n');
+  });
+
+  // The other half of the trade, once per renderer: where the named drawing really
+  // is beside the carrier, one formula reaches the file however much else the
+  // wrapper holds.
+  it.each([
+    [
+      'KaTeX',
+      `<span class="katex"><span class="katex-mathml">${carrier}</span>` +
+        '<span class="katex-html">ab</span><span class="katex-copy">copy</span></span>',
+      'x abcopy y\n',
+    ],
+    [
+      'MathJax v3',
+      `<mjx-container><mjx-math>ab</mjx-math><mjx-assistive-mml>${carrier}</mjx-assistive-mml>` +
+        '<span>copy</span></mjx-container>',
+      'x abcopy y\n',
+    ],
+    [
+      'Wikipedia',
+      `<span class="mwe-math-element"><span class="mwe-math-mathml-a11y">${carrier}</span>` +
+        '<span class="mwe-math-fallback-source-inline">ab</span>' +
+        '<span class="mwe-math-number">(1)</span></span>',
+      'x ab(1) y\n',
+    ],
+  ])('one copy of the formula, whatever else stands there: %s', (_name, html, expected) => {
+    expect(toMarkdown(`<p>x ${html} y</p>`, { math: true })).toBe(expected);
+  });
+
+  // Wikipedia draws most of its formulas as a picture, and a picture has no text.
+  // Read as "nothing was drawn", the MathML converted beside it and one fraction
+  // reached the file twice — `ab![a over b](…)`, the second record carrying the
+  // LaTeX in its alt text. That a drawing exists is what the carrier asks; what the
+  // drawing writes is the `<img>` rule's business, and the two are not the same
+  // question. `math: false` still writes both, and this is the one place the
+  // setting takes characters away: they are a second record of a formula the file
+  // keeps, not text the reader would otherwise lose.
+  it.each([
+    [
+      'the live shape, the carrier in its a11y box',
+      '<span class="mwe-math-element"><a href="/wd">' +
+        '<span class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display:none">' +
+        `${carrier}</span><img src="https://wikimedia.org/svg/9f73" ` +
+        'class="mwe-math-fallback-image-inline" aria-hidden="true" alt="a over b"></a></span>',
+      'x [![a over b](https://wikimedia.org/svg/9f73)](/wd) y\n',
+    ],
+    [
+      'the carrier standing beside the picture unboxed',
+      `<span class="mwe-math-element">${carrier}<img src="https://wikimedia.org/svg/9f73" ` +
+        'class="mwe-math-fallback-image-inline" alt="a over b"></span>',
+      'x ![a over b](https://wikimedia.org/svg/9f73) y\n',
+    ],
+  ])('an image fallback is a drawing though it writes no text: %s', (_name, html, expected) => {
+    const out = toMarkdown(`<p>x ${html} y</p>`, { math: true });
+    expect(out).toBe(expected);
+    // One record, and it is the one the alt text carries the formula in.
+    expect(out.indexOf('a over b')).toBe(out.lastIndexOf('a over b'));
+  });
+
+  // And a carrier that states a formula never reaches the pair question at all.
+  it.each([
+    [
+      'annotation',
+      '<span class="katex"><span class="katex-mathml"><math><semantics>' +
+        '<annotation encoding="application/x-tex">\\frac{a}{b}</annotation></semantics></math>' +
+        '</span><span class="katex-html">ab</span></span>',
+      'x $\\frac{a}{b}$ y\n',
+    ],
+    [
+      'alttext',
+      '<math alttext="\\frac{a}{b}"><mfrac><mi>a</mi><mi>b</mi></mfrac></math>',
+      'x $\\frac{a}{b}$ y\n',
+    ],
+    [
+      'MathJax v2 display',
+      '<script type="math/tex; mode=display">\\frac{a}{b}</script>',
+      'x $$\\frac{a}{b}$$ y\n',
+    ],
+  ])('a stated formula is still written as one: %s', (_name, html, expected) => {
+    expect(toMarkdown(`<p>x ${html} y</p>`, { math: true })).toBe(expected);
+  });
+});
+
 // Строка, не использующая ни одной возможности LaTeX, — не формула, а текст,
 // который кто-то прогнал через рендерер. Такую страница рисует сама, и что
 // нарисовано, читатель и видел: annotation `x <x-foo style="position:fixed">X</

@@ -174,29 +174,69 @@ function drawnText(el: Element): string {
   return (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
-// The three renderer wrappers — the same three that have a rule of their own
-// below, and the only elements that know a carrier and a drawing are one formula.
-const RENDERER_WRAPPER = '.katex, mjx-container, .mwe-math-element';
+// The two halves of one formula, in each renderer's own spelling: the box it puts
+// the carrier in, and the branch it draws beside that box. KaTeX writes
+// `.katex-mathml` next to `.katex-html`, MathJax v3 `<mjx-assistive-mml>` next to
+// `<mjx-math>`, Wikipedia's Math extension a `mwe-math-mathml-*` box next to
+// whichever `mwe-math-fallback-*` it published. The Wikipedia halves are matched on
+// the stem of the class rather than named one at a time, for the reason the wrapper
+// rules settle the duplication at all: the extension chooses between a picture and
+// the TeX as text today, and a list would have to be taught the next one it adds.
+const DRAWN_PAIRS: ReadonlyArray<readonly [box: string, drawn: string]> = [
+  ['.katex-mathml', '.katex-html'],
+  ['mjx-assistive-mml', 'mjx-math'],
+  ['[class*="mwe-math-mathml"]', '[class*="mwe-math-fallback"]'],
+];
+
+// Any of the three, for the carrier no renderer boxed and whose renderer therefore
+// has no name here.
+const DRAWN_HALF = DRAWN_PAIRS.map(([, drawn]) => drawn).join(', ');
+
+// Adjacent siblings and no further. All three renderers write the two halves next
+// to each other, and reading a whole sibling list would put a page of N formulas
+// under one wrapper back on the N² this replaced.
+function drawnBeside(el: Element, drawn: string): boolean {
+  return (
+    el.previousElementSibling?.matches(drawn) === true ||
+    el.nextElementSibling?.matches(drawn) === true
+  );
+}
 
 /**
- * Whether this carrier stands inside a wrapper that drew the formula as well.
+ * Whether a renderer drew this carrier's formula beside it.
  *
  * The question a bare `<math>` has to answer once it is allowed to convert at
  * all. Where nothing else was drawn it is the only witness of the formula and
  * its children are what the reader met; where a renderer drew a half beside it,
  * those same children are the second copy of one formula — `\frac{a}{b}` measures
- * as `ab`, and the file said `abab` where the page showed one fraction. The
- * wrapper is asked, not the `.katex-mathml`/`mjx-assistive-mml` box the carrier
- * sits in, because the drawn half is that box's sibling and only the wrapper
- * holds both.
+ * as `ab`, and the file said `abab` where the page showed one fraction.
  *
- * Empty is an answer: a Wikipedia wrapper whose fallback is the `<img>` draws no
- * text at all, so there is nothing for the MathML to duplicate and it converts —
- * which is what `math: false` does with the same markup.
+ * The named half is asked, never the wrapper's text. Reading the wrapper minus its
+ * carriers meant *any* text answered for a drawing: a caption, a copy button or an
+ * equation number standing in the wrapper claimed the pair, and `<span
+ * class="katex"><math><mi>a</mi></math><span>note</span></span>` lost the `a`
+ * outright — while a wrapper nested in a wrapper answered for the outer carrier
+ * with the inner one's drawing. Both are text the reader saw and the file did not
+ * get, which is the one direction this setting must never take.
+ *
+ * Presence, not text. Wikipedia draws most of its formulas as an `<img>`, and an
+ * image has no `textContent`: read as "nothing was drawn", it let the MathML
+ * through beside a picture of the same formula, and a reader who saw one fraction
+ * got `ab![a over b](…)` — two records of it, the second carrying the LaTeX in its
+ * alt text. Whether the drawn half writes characters is that half's rule to answer;
+ * that a drawing exists is this one's.
+ *
+ * The box is where the pairing is asked, because the drawn half is the box's
+ * sibling and not the wrapper's. A carrier no renderer boxed stands in the box's
+ * place: that is a page writing MathML by hand beside a fallback, and no renderer's
+ * name is on it, so any of the three drawings answers.
  */
 function hasDrawnTwin(el: Element): boolean {
-  const wrapper = el.closest(RENDERER_WRAPPER);
-  return wrapper !== null && drawnText(wrapper) !== '';
+  for (const [box, drawn] of DRAWN_PAIRS) {
+    const boxed = el.closest(box);
+    if (boxed && drawnBeside(boxed, drawn)) return true;
+  }
+  return drawnBeside(el, DRAWN_HALF);
 }
 
 /**
