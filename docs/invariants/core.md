@@ -213,6 +213,16 @@ container leaves behind; the half that measures is the clipper's
   boundary over, and the same asymmetry decides which way to err: reading ink as nothing costs a
   character that renders as nothing, reading nothing as ink welds two words, so anything that
   writes at all still parts its neighbours.
+- Which tags keep the whitespace their source wrote is `PRESERVE_WS` in `src/core/sanitizer.ts`, and
+  it is half of a pair with the clipper: the other side rewrites the newlines a stylesheet drew into
+  `<br>` before this library is handed anything (`src/content/hard-breaks.ts`), and doing that inside
+  one of these tags draws the break twice or puts a tag in the middle of a code sample. So the set is
+  asked, through `preservesSourceWhitespace()`, and had been spelled out over there instead — under a
+  comment naming this one, which is the drift that costs nothing until a tag is added here. A
+  predicate and not the `Set`: handed the set, a consumer could add a tag to it mid-run and change
+  what this file collapses. What the clipper adds on top — `script`, `style`, `svg`, a maths subtree —
+  is a claim about prose and not about whitespace, and stays on its side; brought here it would stop
+  the whitespace inside those tags collapsing, which no rule asked for.
 - A wrapper holding only blanks is not an empty one. Every syntax highlighter writes indentation as
   `<span class="w">  </span>`, so removing such a span took the blank with it: an mkdocs YAML sample
   came back flush left with `anchor_linenums:true`, and a Python one as `importtensorflowastf`. The

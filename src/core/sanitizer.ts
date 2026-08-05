@@ -11,6 +11,22 @@ const REMOVE_STRUCTURAL = new Set(['nav', 'footer', 'aside', 'header']);
 const UNWRAP_IF_EMPTY = new Set(['div', 'span', 'section', 'article']);
 const PRESERVE_WS = new Set(['pre', 'code', 'textarea', 'kbd', 'samp']);
 
+/**
+ * Whether the newlines and runs of spaces the source writes inside this tag are
+ * the ones the reader met — `collapseWhitespace` leaves them exactly as they are.
+ *
+ * Exported because a consumer holding the live page has to know it before this
+ * library ever sees the markup: the clipper rewrites the newlines a stylesheet
+ * drew into `<br>` (`src/content/hard-breaks.ts`), and doing that inside one of
+ * these tags draws the break twice, or puts a tag in the middle of a code sample.
+ * The set itself stays private — handed out, a caller could add a tag to it
+ * mid-run and change what this file collapses. A predicate answers the question
+ * without lending out the answer's storage.
+ */
+export function preservesSourceWhitespace(tag: string): boolean {
+  return PRESERVE_WS.has(tag);
+}
+
 // Every root shape the library is handed: a Document from `server.ts`, a
 // Document from the extension's parser, the container the selection path fills,
 // and the DocumentFragment `enrichRange` builds.
