@@ -4,8 +4,8 @@
 
 Before opening an issue:
 
-1. Check [existing issues](https://github.com/andryushkin/webtodotmd/issues) — it may already be reported
-2. Confirm you are on the latest version (`the version in core/package.json`)
+1. Check [existing issues](https://github.com/andryushkin/dotmd-webcore/issues) — it may already be reported
+2. Confirm you are on the latest version (`the version in package.json`)
 3. Reproduce with the minimal HTML snippet (not an entire page)
 
 **Issue template:**
@@ -24,19 +24,19 @@ Before opening an issue:
 <what the library produced>
 ```
 
-Open an issue at: https://github.com/andryushkin/webtodotmd/issues
+Open an issue at: https://github.com/andryushkin/dotmd-webcore/issues
 
 ## Asking a question / suggesting a feature
 
-Use [GitHub Discussions](https://github.com/andryushkin/webtodotmd/discussions) for questions. For feature requests, open an issue with the `enhancement` label.
+Use [GitHub Discussions](https://github.com/andryushkin/dotmd-webcore/discussions) for questions. For feature requests, open an issue with the `enhancement` label.
 
 ## Development
 
 ### Setup
 
 ```bash
-git clone https://github.com/andryushkin/webtodotmd.git
-cd webtodotmd/core
+git clone https://github.com/andryushkin/dotmd-webcore.git
+cd dotmd-webcore
 bun install
 ```
 

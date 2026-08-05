@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeAll } from 'bun:test';
 import { parseHTML } from 'linkedom';
-// The extension vendors marked as plain JS with no declarations, and this
-// package's tsconfig covers `tests/`, so the specifier is excused by hand and
-// narrowed to `render` below. Reaching out of `core/` is deliberate: this is the
-// parser that draws the side panel's preview, and only it can say whether the
-// reader got a list or a line of text.
-// @ts-expect-error untyped vendor module
-import { marked } from '../../vendor/marked.esm.js';
+// `marked` is a devDependency here for one reason: it is the parser that draws
+// the clipper's preview, and only it can say whether the reader got a list or a
+// line of text. The version is pinned to the one the clipper vendors as
+// `vendor/marked.esm.js` — two spellings of the same parser that drift apart
+// would let this test pass against a renderer no reader ever sees.
+import { marked } from 'marked';
 import { toMarkdown, setDOMAdapter } from '../src/server.js';
 
 beforeAll(() => {

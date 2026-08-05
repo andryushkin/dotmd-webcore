@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeAll } from 'bun:test';
 import { parseHTML } from 'linkedom';
-// The parser that draws the side panel's preview, reached the same way and for
-// the same reason as in `lists.test.ts`, which explains the excuse: only it can
-// say whether the reader was given a paragraph or a code listing.
-// @ts-expect-error untyped vendor module
-import { marked } from '../../vendor/marked.esm.js';
+// The parser that draws the clipper's preview, taken the same way and for the
+// same reason as in `lists.test.ts`: only it can say whether the reader was
+// given a paragraph or a code listing.
+import { marked } from 'marked';
 import { toMarkdown, setDOMAdapter } from '../src/server.js';
 import { CODE_INDENT_MARK, normalize } from '../src/core/normalizer.js';
 import { extractFlankingWhitespace } from '../src/utils/flanking.js';

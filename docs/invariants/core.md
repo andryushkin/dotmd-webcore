@@ -1,0 +1,485 @@
+# Conversion core — invariants
+
+`htmltodotmd`: HTML → Markdown. Isomorphic by contract — it runs against a live
+DOM in an extension, against linkedom in its own tests, and against whatever a
+library caller brings. Anything that needs a layout engine belongs in the
+consumer that reads the live page, not here.
+
+Each rule below has cost a bug already; the reason is what makes it stick.
+
+A file name below is written from this repository's root, so `src/…` is this
+library's own source. A name under `src/content/…` belongs to a consumer — the
+clipper extension, which vendors this library as a submodule — and several rules
+here are one half of a pair whose other half lives there; those are called out
+where they appear. This sheet is the binding statement of the rules; the
+consumer's `docs/conversion.md` is the map of what converts into what and is
+where a construct's *result* is recorded. A rule stated in both is a rule that
+will drift — state it here, and let the map say what the reader gets.
+
+Where a case is answered may not be where it is looked for. A highlight, and a
+background read as one, are under *Output language*, because the question is what
+this library may emit. Everything about `role="heading"` is under *Blocks*, next
+to the semantic containers. Flex and grid rows have a section of their own —
+*Rows drawn side by side*, covering the gap between the items, the measurement
+that says they stood on one line, and what a selection made inside such a
+container leaves behind; the half that measures is the clipper's
+`docs/invariants/content.md`.
+
+## Output language
+
+- The product converts HTML *into* Markdown, so live HTML in the output is unfinished work, not a
+  feature. The only tags a file should hold are escaped ones the page itself displayed — `\<div\>`
+  on a page about HTML, which the reader saw as characters and must go on seeing as characters.
+  Never a tag emitted to carry an appearance: a `<mark>` becomes `==marked==`, not a `<mark>`.
+  That marker is the one thing here no standard defines — neither CommonMark nor GFM has a
+  highlight — and it is written because the destination understands it: Obsidian, EditMD and the
+  editors that took the extension from them. `**` was the alternative and spells a highlight and a
+  bold run the same, which no reader can undo. The price is paid in full on both sides, or not at
+  all: the page's own `x==y` is escaped (`escapeHighlightMarkers`, weighed for flanking exactly as
+  the tildes are, since an unpaired `==` costs nothing), and the panel gets a `marked` extension of
+  its own, or a reader is shown four `=` characters that were just put in their file.
+- A highlight is a *fill*, and the tag is only the older way of stating one: every editor with a
+  highlighter button writes a background on a `<span>` instead — Google Docs, Notion, Confluence,
+  anything built on a contenteditable — so a note whose marks all came from one of those arrived
+  with none of them. `paintedBackground()` is one spelling for both sides, since the snapshot
+  decides what to write down with it and this file reads what arrives: two readings would let a
+  fill be recorded and then declined, and the mark would be missing on exactly the pages the
+  snapshot exists for. What is *not* a highlight: an image or a gradient, which is a decoration
+  rather than a mark and cost `==` round the word `background: url(a;b)` sat behind; and a block,
+  whatever it is painted — a card, a callout, a striped row and a code block are backgrounds no
+  reader reads as a marked phrase, and `==` round a paragraph is a delimiter that does not close; a
+  control, which the browser paints and nobody marked — a form's `Pay now` came back `==Pay now==`;
+  and `<mark>` itself, whose own rule already writes the `==`: the browser paints that tag, so a
+  snapshot taken off a live page reports the fill and the phrase came back `====marked====`, the
+  same mark counted twice. Bold, italic and strike never had this because each compares the style
+  against the base its tag set; `addedMarks()` makes the same comparison for the fill;
+  and a fill under monospaced type, which is a *code chip*, the shape a page writes where it means
+  `<code>` and reaches for a class instead (K7). Reading that one as a highlight repairs nothing and
+  states the wrong thing confidently, so `isMonospaced()` is asked beside the fill on both sides —
+  the snapshot declines to record it, rather than carrying a dozen font names across for the core to
+  ask the same question of. All three were found by running the whole spec page through the
+  extension, which is the only place the class-stated fill is readable at all.
+- A fill is a *mark*, not a rule, and the tag is the only thing with a rule of its own. Claimed as a
+  rule it ran **instead** of whatever the element already had: `<a style="background:#ff0">` lost
+  its href, a `<code>` its backticks, a `<sup>` its Unicode and an `<img>` everything — the picture
+  left the page with not even alt text behind it, since `emphasis()` hands empty content straight
+  back. The mark goes on *outside* the rule (`applyHighlight` in `src/core/parser.ts`), unlike the other
+  three, which apply to the child content before the rule sees it: a fill is drawn behind everything
+  the element drew, and, more sharply, `<sup>` shifts what it is handed into Unicode where `=` has a
+  superscript form — `==2==` came back `⁼⁼²⁼⁼`, the marker mapped along with the digit. The other
+  three survive that position only because `*` and `~` have no shifted form, so the rule refuses the
+  run and writes `x^**2**`.
+- `<mark>` is in `FALLBACK_INLINE_TAGS`, because `emphasis()` falls back to it where `==` cannot
+  render and inside the HTML table fallback. A consumer tells this library's output from page text
+  by that list, so an emitted tag missing from it is a highlighted run they will strip.
+  One place still breaks this and is a debt: the emphasis fallback for content flanked by
+  punctuation, where the alternative was losing the italics and leaving the delimiters on show.
+  `<sub>`/`<sup>` used to be a second and are not any more — they shift into Unicode (`H₂O`, `x²`),
+  all or nothing per element, since a half-mapped run states a different formula just as firmly.
+  Where Unicode cannot spell the run it keeps its own characters behind a `^` or a `_`, which is a
+  character and not a tag: `x^ABC`. That marker is paid knowingly — it takes the fidelity survey
+  from 81 failures to 93 — because plain `xABC` costs nothing visible and loses the level, and a
+  reader of the file cannot see that a level is missing. A run of blanks and a footnote marker (a
+  `<sup>` holding a link, which is every Wikipedia citation) keep no marker.
+
+## Escaping
+
+- Markdown characters in the page's own text are escaped, so the file renders what the reader saw.
+  Inline marks (`*`, a non-intraword `_`, `` ` ``, tildes, link brackets, the last two against a
+  bounded lookahead) are escaped per text node; `#`, `>`, bullets, numbering and a line of dashes only
+  in the node that opens a block — a text node is not a line, and the parser splits text at every
+  element boundary. Never escape inside `pre`, `code`, `kbd`, `samp` or a math subtree: a backslash
+  there is corruption, and in a math subtree only a tag start (`<` before a letter or slash) is
+  neutralized, because that is what can close a fallback cell. It becomes `\lt`/`\gt` and not
+  `&lt;`/`&gt;`: an entity is inert but is not LaTeX, and KaTeX draws it as an error in red — safe
+  and unreadable. Measured against the bundled KaTeX, both ways.
+- A `~` is escaped when a partner can reach it, never for standing at an edge. One tilde renders as
+  itself, so the question is whether a second can pair with it: another in this node that flanking
+  lets close what it opens (`1~5 and 7~9` pays, `~/src and ~/usr` does not — both open, neither
+  closes), or one the line writes beside it, which is the `~~` of a `<del>`. `~` before a struck `x`
+  made `~~~x~~`, a tilde code fence, and `x` left the page — the only defect the survey has found
+  that costs content rather than characters. Both halves of a pair pay or neither does: a backslash
+  does not stop marked closing a `<del>` on the escaped one. `~/src`, `~5 min`, a `<td>~</td>` and a
+  `## ~/home` pay nothing.
+- HTML in page text is escaped too (`\<`, `\&`), just as narrowly. Two halves must not assemble across
+  a node boundary: `sanitize()` calls `normalize()` last, and a node whose tail is still an open
+  construct escapes it defensively, since it cannot see what the next node adds.
+- A line starts where nothing has been *written*, not where no element stands. `opensBlock` read the
+  previous sibling's tag and called every element ink, so a link dropped for its scheme, a spacer
+  image, one marked decorative or an empty wrapper left the text after it unescaped: `<p><a
+  href="javascript:alert(1)"> </a># </p>` reached the file as a `#` opening a line, which renders as
+  an empty heading — the one defect of this class that costs a character instead of adding one.
+  `writesSomething` asks what the rules really write; wrong the other way it costs a backslash that
+  renders as nothing, the text being mid-line after all. Gated on a node that begins with a marker.
+  A player is the other element written out of attributes alone, and *having* an address is not
+  being able to link to one — `<iframe src="about:blank">`, which is a lazily loaded embed before
+  its real address arrives, was read as ink and the `#` behind it opened a heading. The rule and the
+  check share one `mediaLink()` for that reason: the escaper's question is exactly "what does the
+  rule write here", so a second reading of the same rule drifts the next time either moves. The
+  check answers in three values rather than two, because for a picture and a player a `no` is the
+  *whole* answer: both rules ignore what the element holds, so the walk that follows a `false` for
+  every other tag had no business looking inside one — it found the `fallback` in
+  `<video src="javascript:x">fallback</video>` and counted it as ink, although the element writes
+  nothing at all and that markup was for a browser that cannot play the film.
+
+## Emphasis and style
+
+- Emphasis picks the first marker CommonMark's flanking rules let render: `_`/`**`, then `*`/`__`,
+  then an HTML tag (`src/utils/flanking.ts`). Content starting or ending in punctuation, pressed
+  against a word, has no marker that works — emitting one lost the italics and left the characters.
+- A style mark is what is *heavier than its context*, never a large `font-weight`
+  (`src/utils/inline-style.ts`): a heading, a `<th>` and a `<strong>` are already bold and are
+  routinely handed the weight they have, so `**` inside a `##` is what the naive rule writes. It runs
+  both ways — a style declining its tag's mark drops it — and emits through `emphasis()` like every
+  other mark.
+- A mark nothing wears is not written. A container states a weight its children take back, and only
+  the children hold text: Reddit's comment header is a `<summary>` at 700 whose every child is a
+  `<div>` at 400, with the author's name declaring 700 again for itself — so the header line came out
+  bold and the name, bold in its own right, as `**[**name**](…)**`. `addedMarks` walks to the first
+  text still carrying the mark, stopping at any declaration that takes it back; one step deep in the
+  ordinary case, since `<span style="font-weight:700">word</span>` answers on its first child.
+- A mark goes round a run of text, never round a block: delimiters do not cross the blank between
+  two of them, so a bolded `<div>` holding two paragraphs came out `**a\n\nb**` — asterisks shown at
+  both ends and no bold anywhere. Blocks take the mark one at a time, and a block that opens with
+  syntax of its own takes none: `**` before a `##`, a `|` row or a fence is either printed or eaten
+  by the construct, and a heading is bold already, which is the same reason a `<th>` is refused.
+- And round the run that *wears* it, not round everything the element converted to. That a mark
+  reaches text (`addedMarks`) is not how much of the line carries it, and one answer served both:
+  `<div style="font-weight:700"><span style="font-weight:400">not bold</span> and this is</div>` —
+  a card, an editor's paste — came back bold throughout. `marksPerChild` splits it over the
+  element's own children, and `convert()` hands the parts over beside the string they were joined
+  into, since only the parts say where a mark stopped. Every child wears all the marks or none, or
+  the line takes them whole as before: two runs wearing different subsets meet with no character
+  between them, and `**a****_b_**` is one emphasis around four asterisks. A decline deeper than a
+  direct child is that case. A child that *converted to nothing* is not a child at all here — it
+  stands between no characters, so it can end no run, and counting it as one produced those four
+  asterisks for real: `<!---->` is what `v-if` leaves mid-run, and
+  `<span style="font-weight:600">Total<!---->:</span>` came out `**Total****:**`. A *blank* is not
+  such a child either, for the opposite reason — it is drawn, it is drawn bold, and it belongs to the
+  runs on both sides: `<span>a</span> <span>b</span>` under one weight came out `**a** **b**` where
+  one `**a b**` says the same, and a newline between the two, which every formatter writes, did it
+  too. Nothing renders differently, which is why nothing caught it; what it costs is doubled syntax
+  in the pane a person edits. Having no mark of its own to state, a blank takes the one both its
+  neighbours have and stays outside the delimiters wherever they differ — a `**` with a space behind
+  it is not an emphasis CommonMark renders, so a blank pulled inside would show the asterisks.
+- `display` is decided in `convert()` and nowhere else, both ways round: `block` on an inline tag
+  wraps the rule's output in blank lines, `inline` on a block tag returns the content instead of
+  running the rule. A styled block *opens a line*, so `opensBlock()` and every lookahead must ask
+  about it too — while only the tag was asked, `<span style="display:block"># heading</span>` put a
+  real H1 in the file. Only tags whose whole output is content between blank lines can decline one:
+  a `<br>` carries `display:inline` in every computed style there is, and a `<table>` writes a grid.
+  A heading declines one only where something drew before it on its line. `inline` is how a skin
+  puts a control *beside* a title — Vector 2022 wraps every `<h2>` in a `<div class="mw-heading">`
+  and inlines the heading so `[edit]` lands on its line — and taking the declaration at its word
+  cost a Wikipedia article all 60 of its section headings: the `<h2>`s arrived as prose and the
+  `<h3>`s as `**bold**`, which is all a heading's weight leaves once the level is gone. The case the
+  declaration is really for keeps working: `<div>x<h2 style="display:inline">a</h2>y` is one
+  sentence, and there a `##` would break it in two.
+
+## Reading a style
+
+- The core reads attributes, never `getComputedStyle`, because it is isomorphic: `style`, and beside
+  it `data-s2md-style`, a computed style the content script recorded while it still had live nodes.
+  `elementStyle()` joins them — the snapshot is the later word, silence in it is not a denial — and
+  one parser and one set of property readers answer both, so neither side can invent a spelling the
+  other has to be taught. Every question about a style goes through it: `getAlignment` had a regex of
+  its own and a column aligned by a class lost its `---:`. No snapshot is the ordinary case:
+  `src/server.ts` and every library caller convert without one, and behavior must survive its absence.
+  Gate on what a style *says*, not that there is one — `color` and `margin` are most of what a page
+  writes inline and change no character of the output, so `statesConversion()`/`statesDisplay()` come
+  before any parse or ancestor walk.
+- Any lookup keyed by a tag name or a CSS value is a `Map`, never an object literal: the page picks
+  the key, and `EMPHASIS_TAGS['constructor']` answered with `Object` — truthy, so an unknown
+  `<constructor>` element read as an emphasis wrapper and the `<em>` beside it gave up its `*`.
+
+## Whitespace and gaps
+
+- A hard break with nothing left to break is not written: a `<br>` a block ends on, or one a page
+  puts between two blocks to draw vertical space without a paragraph. The run becomes the blank line
+  it was drawing. Hacker News does both — a `<br>` after every layout table — and a captured
+  discussion page carried 133 lines holding a lone backslash, which the renderer shows. Inside a
+  paragraph nothing changes: `a\b` is the break the reader saw, and two in a row are two of them.
+- An image the page drew no pixels of is not written either — a `width` or `height` of one pixel or
+  less, stated in the attribute or in the style. That is a spacer, how a table layout writes
+  indentation and how a tracking pixel hides; the same page carried 128 of them as `![](s.gif)`.
+  It differs from the `alt=""` rule: a spacer states no `alt` at all, so nothing was authored to
+  call it decorative, and the size is all that is left to read.
+
+- The seam between two runs is folded by what was *written* there, not by what stood there. Two
+  collapsible runs meeting across an element boundary are one space on screen, and the fold that
+  makes them one asked the tag: an element outside the inlineable sets reported ink whatever its
+  rules did, so a spacer image between two words left `Cited by  Smashing` with two spaces and an
+  empty `<q>` did the same. It asks `writesSomething()` now — the escaper's own question, one
+  boundary over, and the same asymmetry decides which way to err: reading ink as nothing costs a
+  character that renders as nothing, reading nothing as ink welds two words, so anything that
+  writes at all still parts its neighbours.
+- A wrapper holding only blanks is not an empty one. Every syntax highlighter writes indentation as
+  `<span class="w">  </span>`, so removing such a span took the blank with it: an mkdocs YAML sample
+  came back flush left with `anchor_linenums:true`, and a Python one as `importtensorflowastf`. The
+  tag goes and the text stays; whether it survives as a space or collapses is `collapseWhitespace`'s
+  question, already asked of every other text node. A *block* wrapper is removed as before —
+  `<div> </div>` between two paragraphs is a line the reader saw, never a space.
+## Rows drawn side by side
+
+- A flex or grid row is the one place markup has no separator at all: `<a>c#</a><a>python</a>` is
+  what a tag list is, and the snapshot deliberately keeps quiet about the `block` such a container
+  derives onto its items. `ROW_ATTR` on the container is what is left to say the items stood apart,
+  and `convertChildren` spends it — one blank, never a second where whitespace already is. The same
+  blank decides emphasis, so both neighbour walks (`lookAhead`, `writtenBefore`, `neighbour`) read
+  it: pressed against a word, `**` has no spelling CommonMark renders, and 47 Stack Overflow tags
+  had been falling back to a live `<strong>`.
+- That mark has a stronger value, and it is the only thing here resting on a *measurement* rather
+  than a declaration: `ROW_ATTR="line"` (`ONE_LINE_MARK`) says the content script counted the bands
+  the container's content was drawn on and found one. `inlinedByLine()` spends it in `convert()`,
+  where every other blockness decision is made — an item in `LINE_ITEM_TAGS` holding no block of its
+  own returns its content instead of running its rule. An inline thing given a wrapper inside a flex
+  row is ordinary React, and `<span>Wow even</span><div><a>@karpathy</a></div><span>admits …</span>`
+  had been arriving as three paragraphs, the last opening on a stray space. Both halves are needed
+  and neither side can ask the other's: a row of cards one line tall measures as one band too, and
+  what keeps those blocks apart is that each card holds blocks, which no rectangle sees. A rule that
+  ignores its children — `.katex` is a `<div>` — keeps its own output, or the line would hand back
+  the empty content and delete the formula. `<p>` is out of the set although a band answers for it
+  as well as for a `<div>`: it is the one tag meaning paragraph and nothing else, and the author's
+  word outweighs a measurement — the cost is a byline written in `<p>` staying a paragraph each,
+  against welding two paragraphs the page drew side by side. `LINE_ITEM_TAGS` lives beside
+  `ROW_ATTR` because the snapshot reads it too: it measures nothing the core could not spend.
+- The mark is on the container, so a selection made *inside* one leaves it behind: the row becomes
+  the range's common ancestor and `cloneContents()` returns its children. `cloneWithContext` wraps
+  the fragment in a shallow copy of that container for exactly this — a copy and not a fresh `<div>`,
+  since the rest of the container's attributes answer later questions the same way the page's box
+  would. Selecting the whole row was correct throughout, which is why it took a manual pass to find:
+  the failing gesture is dragging across the sentence, and the sentence came back as three
+  paragraphs again. Presence and not a value decides it, the same question `laysARow` asks.
+- A *style* on that container is lost the same way and was not covered: the wrap asked only about
+  `ROW_ATTR`, so `<div style="font-weight:700">` holding a run that takes the weight back — a card,
+  a paste from a word processor, every editor's wrapper — came back `not bold on screen and this
+  part is`, with no asterisk on the half the reader saw bold. It is the commoner gesture of the two,
+  since selecting the whole div was right all along. Only a box that writes nothing itself earns the
+  wrap (`div`, `span`, `p`): `highlightsToMd` selects the *contents* of what was clicked, so the
+  common ancestor there is the element, and a copy of an `<h3>` round its own content is a heading
+  inside a heading — `### ### Section`. And only where the style says something the conversion reads
+  (`statesConversion`), or a `color` would buy an extra block in the file for a property that
+  changes no character.
+- A list whose items are `display:inline` is the same loss with no mark to spend, and `laysARow`
+  answers for it too. The container is a plain `<ul>` that blockifies nothing, the gap is a
+  `margin` no snapshot records, and `</li><li>` carries not one character — so the same tag list,
+  rewritten as `<li class="d-inline mr4">`, came back `javac++performance`. An item of a list is
+  counted separately by definition and the page shows where it ends, with a gap, a background or a
+  border; Markdown carries none of those and does not have to, but it must not spell two items as
+  one word. The first item answers for the list — one CSS rule inlines all of them — and a
+  paragraph is *not* included, because prose running across two `display:inline` paragraphs is what
+  the page meant.
+
+## Hiding
+
+The expensive mistake here is deleting text a person saw, not keeping text they did not. Every
+threshold sits where no layout lands by accident.
+
+- A `<details>` with no `open` attribute shows its `<summary>` and nothing else. It is the one
+  hiding no style declares: Chrome draws the body away behind `::details-content`, so the markup and
+  a computed style taken off live nodes both describe a visible box. MDN folds its whole sidebar
+  that way, and a 2,655-word article arrived carrying 500 words the reader never saw.
+- `hidingVerdict()` also drops what is drawn where nobody can look: a zero `clip` rect, `clip-path:
+  inset(≥50%)`, a four-digit negative `text-indent` or offset, a 1×1 box that clips. That is how
+  `.sr-only` and `.visually-hidden` are written, and the text under them was meant for a screen
+  reader alone. It is the only spelling of the verdict: `hiddenByStyle()` was a second one, left
+  behind when the third answer arrived, and it answered in two values — so whoever reached for it
+  next would have got a `removed` for a box the sanitizer keeps for the sake of what is visible
+  inside it. Nothing called it, no test held it, and the package never exported it.
+- One thing is exempt from all of it, and only with `math: true`: an element a maths rule can read a
+  formula out of — a `<math alttext>`, an `<annotation encoding="application/x-tex">`, a `<script
+  type="math/tex">`. A rendered formula is two things at once, something drawn for the eye and an
+  invisible twin holding the meaning, and every renderer hides the twin the way `.sr-only` hides a
+  skip link. Removing it left a Wikipedia article with 31 pictures and no formulas, and a KaTeX page
+  with the formula gone from the sentence altogether. The exemption names the element and not a
+  property list, because Wikipedia hides its twin with an inline `display:none` *and* a stylesheet
+  pinhole — a clipped-only exemption repairs the snapshot path and leaves every library caller
+  broken. What still removes a formula the page really hid is structural: the drawing is the witness,
+  so a box holding a carrier *and* something visible is a whole formula and goes, while a box holding
+  a carrier and nothing else is a renderer's wrapper and stays.
+- Which is why two of those hold back. An `opacity: 0` under a transition or an animation is a
+  section on its way in, not one withheld, and reveal-on-scroll libraries put it on half an article;
+  `revealsFrom()` reads the shorthand and the longhands, because an attribute writes one and a
+  computed style the other. And `visibility` is the one a descendant can take back — removal takes
+  the subtree, so a hidden box holding something declared visible again stays, and what is still
+  hidden inside it says so for itself. Every child *element* can; the box's own text nodes cannot,
+  and went into the file for as long as nothing dropped them on their behalf — which is why
+  `hidingVerdict()` has a third answer, `invisible-but-kept`, and the sanitizer takes the glyphs
+  such a box holds directly. Its whitespace stays: a blank is the same hidden or shown, and taking
+  it welds the visible runs on either side into one word.
+- A `visibility:hidden` under a transition is either kind, written identically: a section a reveal
+  library has not animated in, or a dropdown standing by. The box tells them apart — an overlay must
+  leave the flow or it would hold space open while closed — so `absolute`/`fixed` is removed and
+  anything in the flow stays. Judged wrong one way the file loses a menu, the other way the article.
+
+## Maths
+
+- Display is what the *page* states, and each renderer states it in its own spelling: `<math
+  display="block">` (MathML's own attribute, and what Wikipedia sets), a `.katex-display` ancestor,
+  `<mjx-container display="true">` — MathJax reads MathML's `block` and writes its own `true`, so
+  asking one element the other's question answers about nothing — and `type="math/tex; mode=display"`.
+  Never the LaTeX: Wikipedia wraps *every* formula in `{\displaystyle …}`, inline ones included (19
+  of 31 formulas on one article are display and all 31 carry the wrapper), so reading it as display
+  cut a sentence into centred blocks, and the same test read a real display equation as inline
+  because it was asked of the wrong attribute.
+- That wrapper comes *off*, once, at the one exit every source passes through — the annotation, the
+  `math/tex` script and the `alttext` alike. It was stripped on the `alttext` branch alone, which is
+  the branch the live site never reaches, so every captured formula carried eleven characters of
+  someone else's syntax into whatever the reader pasted it into; the preview hid that, because KaTeX
+  renders the wrapper as the formula. `{\textstyle …}` is the same wrapper stating the opposite and
+  goes too — 264 of 905 sampled formulas use it — but it must not vote on display, or a
+  `<math display="block">` written with it would come back inline. The start anchor is what keeps a
+  formula's own `\displaystyle` safe, and a brace-balance check is what keeps `{\displaystyle a}+{\displaystyle b}`
+  from being read as one group.
+- A carrier is what a rule can read a formula *out of*, never any MathML: an assistive twin with no
+  annotation is not one, and reading it as one made MathJax v2 write the formula twice — once from
+  the twin the extension's own MathML rule then converted, once from the `<script>` that always
+  carried it. Where a renderer puts a picture beside the twin, the duplication is settled on the
+  *wrapper* — `.katex`, `<mjx-container>`, `.mwe-math-element` each have a rule that ignores its
+  children — because the wrapper is the only element that knows the two are one formula. A rule that
+  merely refused the `<img>` would have to be taught every further fallback the renderer adds.
+- A carrier using no LaTeX at all carries no formula either, and there the screen settles it like
+  everything else: the wrapper writes what the page *drew*. `\`, `^`, `_`, `{`, `}` and `&` are the
+  whole of the language — no command, script, group or alignment is written without one — so
+  `E = mc^2` and `\frac{a}{b}` never reach this branch, and `x <x-foo style="position:fixed">X</x-foo> y`
+  does: a string somebody's page rendered, drawn as `x custom X y`, which used to reach the file as
+  an attribute nobody saw plus `\lt`/`\gt` spent defusing markup that was never the reader's. The
+  drawn half is the wrapper minus every carrier shape — `<math>`, a bare `<annotation>`, `<mjx-assistive-mml>`,
+  `.katex-mathml`, the `math/tex` script — and where there is none the annotation stays the only
+  witness, so the formula is written rather than deleted. Markup in the annotation says the same
+  thing a second way and is the half that survives a formula around it: `\frac{a}{b} <x-foo
+  style="position:fixed">X</x-foo>` uses the language on its first half, so the syntax test alone
+  answered "formula" and the attribute rode in again, defused and still on nobody's screen — one
+  `^` was the whole of what it took. `MATH_TAG_SHAPED` is one spelling in `src/core/escape.ts` for both
+  readers, since the escaper defuses exactly what this reads as evidence. The cost is real and
+  knowingly paid: on a
+  page KaTeX really rendered, `a < b` and `x + y` now arrive as the glyphs `a\<b` and `x+y`, spacing
+  and italics gone, because glyph spans carry no spaces. It buys the rule that the file says what
+  the screen said.
+- Every one of those three claims its wrapper only where it can *read* a formula there, and the
+  class alone is never enough. Claiming it with nothing to read returns the empty string, and
+  ignoring the children then takes the drawing with it — so the wrapper of a formula whose LaTeX
+  the page never carried deleted what the reader saw. Both renderers really ship that shape: KaTeX
+  with `output: "html"` builds no MathML at all, and MathJax v3 emits assistive MathML only with
+  the accessibility extension loaded. `math: true` was returning less than `math: false` on both,
+  which is the one direction the setting must never take. What the page drew is then converted as
+  the glyphs it is — `E=mc2` for `E=mc^2`, a level lost and no character missing — because a
+  rendered formula read back off the screen is the *only* thing left, and it is not a formula: a
+  `\frac{a}{b}` measures as `ba`, the denominator standing first in the DOM with CSS putting the
+  numerator above it. Which is why this is a fallback and never the source.
+
+## Blocks
+
+- A `role="heading"` is a claim a `<div>` cannot back up on its own, and the rule took it on its
+  word: the spec page showed six identical lines, one size, one weight, no hierarchy anywhere on
+  screen, and four headings went into the file. A tag is never in that position — the browser paints
+  an `<h3>` large and bold whatever the page says, so what it states and what the reader met cannot
+  come apart. Three things have to agree (`writtenAsHeading`): the element takes a line of its own,
+  it holds no block of its own, and it was drawn apart from the text around it. Each answers a way of
+  being wrong — a role on a label inside a sentence would be cut in two by a `##`, one on the wrapper
+  of a section would drag the section onto the heading's line, one on nothing visible would invent
+  structure. Strictness is affordable here and nowhere else: both errors cost a rank and no words, so
+  a demoted heading arrives as a paragraph with every character in it. `minHeadingLevel` asks the
+  same question, or a role written as a paragraph would still set the level every real heading is
+  then normalized against.
+- The third of those is the one place a rule reads *silence* in a snapshot as an answer, and it can
+  only do that because something positive says the drawing was read: the consumer's snapshot
+  (`src/content/style-snapshot.ts` in the clipper) writes the
+  relative size on every element carrying the role, whether or not it differs, so `font-size:1em` is
+  the declaration meaning "looked at, and ordinary". A ratio rather than a length, because 24px is a
+  heading on one page and body text on another, and because the length it would be compared against
+  sits on the parent — which a selection starting at the heading leaves outside the fragment. The
+  two sides are one pair: anything further the criterion learns to ask has to be written there too.
+  Weight is the other spelling and either alone is enough — a page tells a heading apart by size or
+  by weight, and requiring both loses half the interfaces there are.
+- `aria-level` outside 1…6 is clamped, not defaulted. The default 2 is what a browser reports for a
+  heading that states *no* level; ARIA puts a floor of 1 on the attribute and no ceiling, so
+  `aria-level="9"` is a level the page really stated, and reading it as 2 wrote `## Child` under
+  `### Parent` — a heading above its own parent, which a tag never does. One such line also entered
+  `minHeadingLevel` as a 2 and held the whole page down.
+- The semantic containers are one set, `src/utils/blocks.ts`, read by the parser and by the rule
+  that writes them. Two lists made separately disagreed: the escaper counted a `<figure>` and a
+  `<form>` as the end of a line while nothing wrote a boundary there, so the reading model ended the
+  line and the writing model welded it to the next — a picture ran into its caption, a `<summary>`
+  into the body it opens, five sectioning elements into `SectionArticleFormLegendField`. What
+  qualifies is what a `<div>` qualifies on: the element draws a line of its own and Markdown has no
+  other spelling, so its content between blank lines is the closest the file comes. A `<table>`, a
+  `<pre>` and a `<li>` are out for the opposite reason — each writes syntax returning the content
+  would throw away.
+
+## Code
+
+- The language is read from the class in the highlighters' spellings first (`language-x`, `lang-x`,
+  and the rest), then from the class that *is* the name — `<code class="java">`, which is what
+  highlight.js writes when the page hands it the language, and what Habr's editor produces; ten
+  blocks of one article arrived as fences with no language at all. The bare name is answered from a
+  list of real languages, never from the shape of the word: `snippet`, `code` and `highlight` all
+  pass for a token, and ```snippet claims something the page never said.
+- A language bar drawn *beside* the `<pre>` is moved into it as the `<figcaption>` the page could
+  have written: one shape, one answer, since the rule already knows what a caption naming a language
+  means. `<div><span>python</span><button>Копировать</button></div><pre>…` is ChatGPT, Habr and half
+  the documentation sites, and it arrived as a paragraph reading `pythonКопировать` above a fence
+  with no info string. Every condition refuses a guess: the wrapper holds the bar and one `<pre>` and
+  nothing else, what survives the bar's controls is a language a highlighter really ships, and a
+  heading is never taken. Nor is such a caption ever printed as a label line, whichever language the
+  fence ends up with — `Python` beside a `language-python` class is no disagreement.
+  Two of those conditions were read off the tags and the lift took text with it, which is the
+  expensive direction: a bar wrongly kept is a word of furniture, a heading wrongly lifted is a line
+  nobody can see is missing. "Nothing else" counted the wrapper's *elements*, so `<div>Intro
+  <div>python</div><pre>…` matched and the page's `python` left with the bar — its text nodes count
+  too, blanks and comments aside. And "a heading" meant the bar's own tag, which `HEADER_TAGS`
+  already refuses; one wrapper down, `<div><div><h3>python</h3></div><pre>…` is the same `<h3>` and
+  it was taken, while a direct sibling was kept. A section named for its language — `<h3>HTTP</h3>`
+  over a request — is that shape, so a heading is refused wherever in the bar it stands, `role=
+  "heading"` included.
+- What a `<pre>` holds besides its `<code>` is read too — `lost<br><code>kept</code>` is a real
+  shape and losing the first half is silent — but a *control* in that space is furniture, not code.
+  A `<figcaption>`, a `<button>`, and any link or `role="button"` outside the `<code>`: Habr ends
+  every block with `<div class="code-explainer"><a>Объяснить с<img></a></div>`, so every sample
+  closed with `}Объяснить с`. Inside the `<code>` a link is part of the sample and stays.
+
+## Tables
+
+- A pipe table states alignment once per column, and the page may say it in either row. The header
+  answers first; when it is silent the body does, but only unanimously — a table of numbers carries
+  `text-align` on every `<td>` and nothing on the `<th>`, while one differing or silent cell means
+  the column was never aligned at all.
+- A column is a place a cell *begins*. One that only ever holds the continuation of a merge beside
+  it is drawn at no width, so writing it costs the file pipes nobody saw: Wikipedia's infoboxes span
+  `colspan="4"` over a `<th>` label and a `<td colspan="3">` value, and one arrived four columns wide
+  with the last two empty in all 22 rows. Asked of the grid position and never of its text — a
+  `<td></td>` is a column the page drew, and a wiki table parts two halves of a list with one.
+- A `border="0"` table with no `<th>`, `<thead>` or `<caption>` is furniture, not data: the cells
+  become blocks and the scaffolding goes, in `sanitize()` before any rule sees it. Hacker News is
+  built this way throughout — 131 tables on one page, the page a table and each comment a table
+  inside it — and serialized as grids a 205 KB page became 378 KB of pipes on six lines, in fourteen
+  seconds; read as layout it is 74 KB in 65 milliseconds. Both halves are needed: a header means the
+  columns mean something whatever border is drawn, and a headerless table that says nothing about
+  its border keeps its grid. `role="presentation"`/`none` says it outright and `role="table"`/`grid`
+  denies it, both before anything else is read. Nesting is *not* a signal, though every layout is
+  nested — a data table inside a cell already has an answer (folded into rows), and reading the
+  nesting as layout would throw it away.
+- The HTML table fallback sets `outputContext: 'html'` for its cells: an HTML block is not parsed as
+  Markdown, so escaping shows backslashes *and* `**bold**` shows asterisks. Emphasis, code and links
+  emit tags; an image emits alt text, since allowing `src`/`alt` past the preview's allow-list would
+  widen it for a case that already rendered nothing. A link's scheme is checked.
+
+## Package
+
+This repository is the package (`htmltodotmd`), with its own `tsup` build, its own version, and its
+own `exports`. It has never been published — there is no npm release, and the consumers vendor it as
+a git submodule and import it from source, so the version in `package.json` currently numbers
+nothing and the `tsup` build serves a publication that has not happened. Four `data-s2md-*`
+attribute names are baked into its public surface (`SNAPSHOT_ATTR` and `ROW_ATTR` here,
+`ORIGIN_ATTR` and `ORIGIN_ROW_ATTR` in `src/browser.ts`); publishing this as a general library
+means making those a parameter first.
+
+A new observation buys a *value* of an existing name where the name already means that thing —
+`ONE_LINE_MARK` is why `ROW_ATTR` has two, one line being a kind of row — and a name of its own
+where it does not. `ORIGIN_ROW_ATTR` was `data-s2md-row` until a header row and a measured line
+were found sharing it: `laysARow` asks whether the attribute is *present*, so a marked `<tr>`
+answered a question about layout, and the wrap restoring a measured row had to name the header
+value to refuse it. Both readers had to know about the other's fact, and the only thing keeping
+that harmless was the mark coming off in a `finally`. Counting parameters is the wrong economy
+while every consumer imports this package from source: an unpublished name costs a rename, a
+conflated one costs whoever reads either half.

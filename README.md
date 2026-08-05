@@ -4,9 +4,9 @@
 
 TypeScript/JavaScript library for converting HTML to Markdown. Zero dependencies. Works in any browser, Chrome Extension, or bundler (Vite, esbuild, webpack).
 
-Developed in the [webtodotmd](https://github.com/andryushkin/webtodotmd)
-repository, which is also its first consumer: the extension imports it straight
-from source, so the library and the product never drift apart.
+Its consumers are Chrome extensions that vendor this repository as a git
+submodule and import it straight from source, with no build step between the two
+— so the library and the products built on it never drift apart.
 
 ## Integration
 
@@ -126,13 +126,11 @@ See [docs/CHROME_EXTENSION.md](./docs/CHROME_EXTENSION.md) for a complete integr
 ## Build from Source
 
 ```bash
-bun install                    # from the repository root, once
-bun run --filter htmltodotmd build   # outputs core/dist/browser.mjs and .d.ts
-bun test core                  # this package's suite; bare `bun test` adds the extension's
+bun install        # once
+bun run build      # outputs dist/browser.mjs and .d.ts
+bun test           # the suite
+bunx tsc --noEmit  # bun does not check types
 ```
-
-`bun run build` at the repository root builds the *extension*, not this library —
-the commands above are `--filter`ed on purpose.
 
 ## License
 
