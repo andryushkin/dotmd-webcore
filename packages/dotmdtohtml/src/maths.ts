@@ -60,8 +60,26 @@ const DISPLAY_MATH = /^\$\$([\s\S]+?)\$\$/;
  * blank, a closing one is not preceded by one, and a closing one is not followed
  * by a digit. That last is what parts two amounts: the dollar of `$159.00` has a
  * `1` behind it and so cannot close anything.
+ *
+ * The one blank that does not part anything is the delimiter behind `\lt` and
+ * `\gt`, and that exception is the other half of a pair with the converter. A
+ * page may draw markup inside a formula, and `escapeMathTags` defuses it by
+ * writing LaTeX's own names for the brackets — with the space LaTeX needs to tell
+ * the command from the letter behind it, and eats again when the formula is
+ * drawn. A formula the page ended with a tag therefore ends with that space, and
+ * Pandoc's second condition threw the whole formula away: the reader was shown
+ * `$\lt img src=x onerror=alert(1)\gt …$`, the file's own source, where the page
+ * had drawn markup. Prose is untouched — `Costs $5 and $x` still ends in a blank
+ * that no backslash put there.
+ *
+ * Those two commands and not every control word, though every control word
+ * carries the same delimiter. The exception is worth what the pair costs and no
+ * more: `Price was $12 \approx $ last year` is a sentence about mathematics, and
+ * a general rule reads it as mathematics — drawing `12≈` and taking the year with
+ * it. These are the two `escapeMathTags` writes, and the only two a converted
+ * page can end a formula with.
  */
-const INLINE_MATH = /^\$(?!\s)([^$\n]*?[^$\s])\$(?!\d)/;
+const INLINE_MATH = /^\$(?!\s)([^$\n]*?(?:[^$\s]|\\[lg]t ))\$(?!\d)/;
 
 /**
  * A token no note can hold, because it does not exist until this render begins.

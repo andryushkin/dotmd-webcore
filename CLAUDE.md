@@ -120,7 +120,11 @@ exactly why it can drift silently.
   GFM, and the renderer for it now lives here: the pair that used to span a
   repository boundary is two packages apart, and neither half moves alone. A
   consumer parsing this Markdown with anything else shows the reader four `=`
-  characters.
+  characters. `escapeMathTags` is the same pair in the other direction: it
+  defuses markup inside a formula by writing `\lt ` and `\gt `, delimiter space
+  and all, and the inline maths tokenizer over there has to allow that space
+  before a closing dollar or the whole formula is refused and the reader is shown
+  its source.
 
 ## Conventions
 

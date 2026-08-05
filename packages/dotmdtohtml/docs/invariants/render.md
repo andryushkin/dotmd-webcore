@@ -73,6 +73,19 @@ a pair whose other end is there.
   conditions are Pandoc's and they are about the dollars, not the body: an opening
   dollar is not followed by a blank, a closing one is not preceded by one, and a
   closing one is not followed by a digit. The last is what parts two amounts.
+- **The delimiter behind `\lt` and `\gt` is not one of those blanks**, and this is
+  the half of a pair whose other half is `escapeMathTags` in the converter.
+  Markup a page drew inside a formula is defused there by LaTeX's own names for
+  the brackets, each carrying the space LaTeX needs to tell the command from the
+  letter behind it and eating it again when the formula is drawn. A formula the
+  page ended with a tag therefore ends with that space, so Pandoc's second
+  condition threw the whole formula away and the reader was shown `$\lt img
+  src=x onerror=alert(1)\gt …$` — the file's own source — where the page had
+  drawn markup. Those two commands and not every control word, though every one
+  carries the same delimiter: `Price was $12 \approx $ last year` is a sentence
+  about mathematics, and a general rule draws `12≈` and takes the year into the
+  formula with it. Prose is untouched for the same reason the condition exists —
+  the blank in `Costs $5 and $x` is one no backslash put there.
 - **Those conditions are asked by a tokenizer, never by a pass over the note.** A
   regular expression over a Markdown document knows nothing about the document:
   the pass lost the contents of `` `$x$` ``, ate the escaped dollar in `Costs

@@ -275,6 +275,43 @@ describe('a price is not a formula', () => {
   });
 });
 
+// The one blank that parts nothing, and the half of a pair whose other half is in
+// the converter. A page may draw markup inside a formula, and `escapeMathTags`
+// defuses it by writing LaTeX's own names for the brackets — `\lt `, `\gt ` —
+// each carrying the space LaTeX needs to tell the command from the letter behind
+// it, and eats again when the formula is drawn. A formula the page ended with a
+// tag therefore ends with that space, and Pandoc's closing condition threw the
+// whole formula away: the reader was shown `$\lt img src=x onerror=alert(1)\gt $`,
+// the file's own source, in place of the markup the page had drawn.
+describe("the delimiter behind \\lt and \\gt is not a blank", () => {
+  test.each([
+    ['the shape the converter writes for a tag', '$\\lt img src=x onerror=alert(1)\\gt $'],
+    ['one the page ended with a closing tag', '$a \\lt /td\\gt $'],
+    ['a formula that is nothing else', '$\\lt $'],
+  ])('%s is still a formula', (_name, md) => {
+    expect(html(md)).toContain('class="katex"');
+  });
+
+  test('the formula that reaches the typesetter is the file\'s, delimiter aside', () => {
+    const { math } = renderer().render('$a \\lt /td\\gt $');
+    expect([...math.entries.values()]).toEqual([{ latex: 'a \\lt /td\\gt', display: false }]);
+  });
+
+  // Prose is untouched: a blank no backslash put there still parts two dollars,
+  // which is the whole of what Pandoc's condition is for. The last two are why
+  // the exception names two commands instead of allowing any control word — a
+  // sentence about mathematics is not mathematics, and a general rule draws
+  // `12≈` and takes the rest of the sentence into the formula with it.
+  test.each([
+    ['two amounts', 'Costs $5 and $x in total.'],
+    ['a trailing blank inside the dollars', 'a $b and c $ d'],
+    ['a sentence about a formula', 'Price was $12 \\approx $ last year.'],
+    ['a command that is not one of the two', 'A $100 \\times $ multiplier'],
+  ])('%s is not a formula', (_name, md) => {
+    expect(html(md)).not.toContain('class="katex"');
+  });
+});
+
 // The pass used to be `String.replace` over the whole note, which knows nothing
 // about the document it is rewriting. Each of these lost text the reader wrote.
 describe('the maths pass is opaque to what is not prose', () => {
