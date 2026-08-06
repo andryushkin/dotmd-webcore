@@ -471,10 +471,11 @@ describe('findArticle → highlightsToMd (selection profile)', () => {
 });
 
 /**
- * Frozen copies of live pages (downloaded once). A live site drifts — these
- * files are the evidence for the two defects, not a contract with the network.
- * Assert on substrings and the opening lines, never full snapshots: the HTML is
- * hundreds of kilobytes.
+ * Structural reconstructions of live pages that exposed two extract defects.
+ * A live site drifts; these files do not track it. Prose is original (see
+ * tests/real-pages/README.md for source URL, fetch date, upstream licence and
+ * why each is a reconstruction rather than a verbatim dump). Assert on
+ * substrings and opening lines, not full snapshots.
  */
 describe('findArticle on frozen real pages', () => {
   const REAL = join(dirname(fileURLToPath(import.meta.url)), 'real-pages');
