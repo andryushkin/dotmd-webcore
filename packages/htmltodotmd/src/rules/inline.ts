@@ -1035,6 +1035,18 @@ function mediaLabel(el: Element, src: string): string {
   }
 }
 
+/**
+ * Whether an image address is only a loading stand-in, not a picture.
+ *
+ * PAIR with `isPlaceholderSrc` in `packages/pagetodotmd/src/clone-edits.ts`.
+ * That side refuses to write a live `currentSrc` that is only a placeholder
+ * (and strips the lazy-load attributes when it does write). The two must
+ * agree: a filename this side calls a placeholder and that side accepts is how
+ * `ph.gif` / `loading.gif` reached the Markdown after materialize while
+ * `extractImageUrl` alone would have kept `data-src`. Not exported through the
+ * snapshot surface — restated there with the same three arms rather than a
+ * deep import across the package boundary.
+ */
 function isPlaceholder(src: string): boolean {
   return (
     src.startsWith('data:image/') ||

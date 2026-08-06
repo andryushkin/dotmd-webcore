@@ -83,22 +83,101 @@ export function imageAddressSignature(img: Element): string {
 }
 
 /**
- * Whether a live `currentSrc` is worth carrying onto the clone.
+ * Whether a URL is only a loading stand-in, not a picture.
  *
- * Empty and whitespace-only are not addresses. A `data:image/…` URI is the
- * 1×1 tracker pixel / loading placeholder a page leaves in `src` while the real
- * file is still resolving — writing that into `src` and stripping the lazy-load
- * attributes would replace a missing image (and its alt text) with a fake one.
- * `bun test` cannot settle this path: under linkedom and happy-dom
- * `img.currentSrc` is `undefined`, so the behaviour is verified in a real
- * Chrome, not here.
+ * PAIR with `isPlaceholder` in `packages/htmltodotmd/src/rules/inline.ts` —
+ * same three arms, same order. That predicate is local to the image rule and
+ * is not on the snapshot / selection / main surfaces `engine.ts` is allowed to
+ * name; reaching past those entries would be a deep import, which the package
+ * boundary forbids. The address-attribute list above is the same shape of pair
+ * for the same reason. Restate the verdict here with this marker rather than
+ * paste a half of it (the earlier `data:`-only check was that half, and it let
+ * `loading.gif` / `spacer.png` through while the converter still called them
+ * placeholders). A third spelling is the defect "Keep in sync" is about.
+ */
+function isPlaceholderSrc(src: string): boolean {
+  return (
+    src.startsWith('data:image/') ||
+    /placeholder|spacer|1x1|blank|loading/i.test(src) ||
+    (src.length < 50 && src.startsWith('data:'))
+  );
+}
+
+/**
+ * Whether a live `currentSrc` is worth carrying onto the clone as the picture
+ * the document should hold.
+ *
+ * This function promises the **picture**, not the pixels the reader may still
+ * be looking at. A lazy loader that has not fired leaves `currentSrc` on the
+ * placeholder in `src`; writing that over and stripping `data-src` throws away
+ * the only copy of the real address — exactly what `extractImageUrl` prefers
+ * for this markup. Empty and whitespace-only are not addresses. A value the
+ * paired placeholder verdict refuses is not a picture either.
  */
 function isUsableCurrentSrc(src: string): boolean {
   const value = src.trim();
   if (!value) return false;
-  if (value.startsWith('data:image/')) return false;
-  if (value.length < 50 && value.startsWith('data:')) return false;
+  if (isPlaceholderSrc(value)) return false;
   return true;
+}
+
+/**
+ * Lazy-load attributes `extractImageUrl` reads before `src` — the ones that
+ * still hold the real address while the browser has not adopted it into
+ * `currentSrc`. Subset of {@link IMAGE_ADDRESS_ATTRS}; srcset is not a single
+ * URL and is handled by materializing a real `currentSrc` when the browser
+ * picked one.
+ */
+const LAZY_SRC_ATTRS = [
+  'data-src',
+  'data-original',
+  'data-lazy-src',
+  'data-full-src',
+  'data-hi-res-src',
+] as const;
+
+/**
+ * True when `currentSrc` still names the markup `src` (or a relative form of
+ * it) while a lazy-load attribute holds a different address the browser has
+ * not adopted. In that state the loader has not fired: materializing would
+ * keep the placeholder and drop the picture.
+ */
+function lazyLoaderStillPending(img: Element, live: string): boolean {
+  let lazy = '';
+  for (const name of LAZY_SRC_ATTRS) {
+    const v = (img.getAttribute(name) ?? '').trim();
+    if (v) {
+      lazy = v;
+      break;
+    }
+  }
+  if (!lazy || isPlaceholderSrc(lazy)) return false;
+  // Browser already selected the lazy address (or a resolution of it).
+  if (addressRefersTo(live, lazy)) return false;
+  const src = (img.getAttribute('src') ?? '').trim();
+  // Still on the markup src → loader idle. A currentSrc that matches neither
+  // (srcset pick, CDN rewrite of the real file) is a real choice — keep it.
+  if (src && addressRefersTo(live, src)) return true;
+  return false;
+}
+
+/**
+ * Whether a live absolute `currentSrc` is the same resource as a (possibly
+ * relative) attribute value. `currentSrc` is usually absolute; attributes are
+ * often not. Equality or a trailing-path match is enough: we only need to tell
+ * "still the placeholder file" from "already the real file".
+ */
+function addressRefersTo(live: string, attr: string): boolean {
+  if (!attr) return false;
+  if (live === attr) return true;
+  // Strip a trailing slash so /photo and /photo/ do not disagree for free.
+  const a = attr.replace(/\/$/, '');
+  const l = live.replace(/\/$/, '');
+  if (l === a) return true;
+  if (l.endsWith(a) && (l.length === a.length || l[l.length - a.length - 1] === '/')) {
+    return true;
+  }
+  return false;
 }
 
 /** `currentSrc` off a live image, or `''` where the environment has none. */
@@ -151,11 +230,19 @@ export function collectCurrentSrc(root: ParentNode): Map<string, string> {
  * Writes a live image's `currentSrc` into the clone's `src`, and strips every
  * attribute that would otherwise win over it in the converter.
  *
- * `currentSrc` is a layout answer: it exists only on a live, laid-out `<img>`.
- * A detached clone has no layout, so `(cloneImg as HTMLImageElement).currentSrc`
- * is not the browser's choice — under linkedom it is not even defined. The
- * value therefore has to be read from the live page *before* the capture, and
- * handed in here.
+ * Promise: the **picture the document should hold**, not the pixels currently
+ * painted. `currentSrc` is a layout answer and often the right file — a
+ * resolved srcset pick, a lazy load that has fired — but when the loader has
+ * not run it is still the placeholder in `src`. Carrying that over and
+ * stripping `data-src` is how a grey square reached the Markdown while the
+ * converter alone would have kept `real-photo.jpg`. A placeholder verdict or a
+ * still-pending lazy attribute leaves the element alone so `extractImageUrl`
+ * can prefer the real address.
+ *
+ * `currentSrc` exists only on a live, laid-out `<img>`. A detached clone has
+ * no layout, so `(cloneImg as HTMLImageElement).currentSrc` is not the
+ * browser's choice — under linkedom it is not even defined. The value has to
+ * be read from the live page *before* the capture, and handed in here.
  *
  * Two forms of the hand-off:
  *
@@ -166,8 +253,9 @@ export function collectCurrentSrc(root: ParentNode): Map<string, string> {
  * - a callback `(cloneImg) => string | null | undefined` for a consumer that
  *   already has its own pairing.
  *
- * Either way, a missing, empty, or placeholder value leaves that image alone.
- * `bun test` cannot prove a real `currentSrc` — see `collectCurrentSrc`.
+ * Either way, a missing, empty, placeholder, or still-pending lazy value
+ * leaves that image alone. `bun test` cannot prove a real `currentSrc` — see
+ * `collectCurrentSrc`.
  */
 export function materializeCurrentSrc(
   fragment: ParentNode,
@@ -183,7 +271,9 @@ export function materializeCurrentSrc(
   for (const img of Array.from(fragment.querySelectorAll('img'))) {
     const live = resolve(img);
     if (live == null || !isUsableCurrentSrc(live)) continue;
-    img.setAttribute('src', live.trim());
+    const value = live.trim();
+    if (lazyLoaderStillPending(img, value)) continue;
+    img.setAttribute('src', value);
     for (const name of IMAGE_ADDRESS_ATTRS) {
       img.removeAttribute(name);
     }

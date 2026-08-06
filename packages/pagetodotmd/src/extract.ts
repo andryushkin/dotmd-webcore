@@ -310,20 +310,32 @@ function preferSpecific(scored: Scored[]): Scored {
 }
 
 /**
- * Nearest preceding h1–h2 when the root has no heading of its own.
+ * Nearest preceding h1–h2 worth lifting as the article's title.
  *
  * Only a heading element, never a whole chrome region. Same sectioning parent,
- * no other `<article>` between them. The article's title is the one immediately
- * above the body *inside the same section* (`<main><h1>…</h1><article>`); the
- * site's name lives in the page banner and must not be lifted — that is the
- * ordinary blog `<body><header><h1>Site</h1></header><article>` shape, which
- * has no `<main>` and would otherwise open the document on the site name.
+ * no other `<article>` between them. The site's name lives in the page banner
+ * and must not be lifted — that is the ordinary blog
+ * `<body><header><h1>Site</h1></header><article>` shape, which has no `<main>`
+ * and would otherwise open the document on the site name.
+ *
+ * Level, not presence: an article with section `<h2>`s is the ordinary case,
+ * and refusing the lift whenever *any* h1–h2 sits inside left the real title
+ * outside the capture and let `topHeadingLevel: 1` promote a section heading
+ * into the document title. The outside heading is lifted only when it strictly
+ * outranks every heading the root already holds (lower number wins: h1 beats
+ * h2). Equal rank means the root already has a title of that level — so
+ * `<main><h1>Site or category</h1><article><h1>The real title</h1>…` does not
+ * lift, and neither does outside h2 + inside h2. No heading inside → always
+ * lift. An inside h1 short-circuits the walk: nothing outside can outrank it.
  */
 function liftHeading(
   root: Element,
   isVisible: (el: Element) => boolean,
 ): Element | null {
-  if (hasOwnHeading(root, isVisible)) return null;
+  // Best (lowest) h1–h2 level already under the root. null = none.
+  const ownBest = bestOwnHeadingLevel(root, isVisible);
+  // Nothing outside can outrank an h1 the body already carries.
+  if (ownBest === 1) return null;
 
   const parent = sectioningParent(root);
   if (!parent) return null;
@@ -334,7 +346,10 @@ function liftHeading(
   while (sib) {
     if (sib.tagName.toLowerCase() === 'article') return null;
     const heading = lastHeadingIn(sib, isVisible);
-    if (heading) return heading;
+    if (heading && outranksOwn(heading, ownBest)) return heading;
+    // A candidate that does not outrank is still "nearest"; looking further
+    // would skip past the title that sits immediately above the body.
+    if (heading) return null;
     sib = sib.previousElementSibling;
   }
 
@@ -347,13 +362,52 @@ function liftHeading(
     while (prev) {
       if (prev.tagName.toLowerCase() === 'article') return null;
       const heading = lastHeadingIn(prev, isVisible);
-      if (heading) return heading;
+      if (heading && outranksOwn(heading, ownBest)) return heading;
+      if (heading) return null;
       prev = prev.previousElementSibling;
     }
     probe = probe.parentElement;
   }
 
   return null;
+}
+
+/** True when `heading` is a strictly higher rank than the root's best own level. */
+function outranksOwn(heading: Element, ownBest: number | null): boolean {
+  const level = headingRank(heading);
+  if (level === null) return false;
+  // No heading inside → any candidate outranks the void.
+  if (ownBest === null) return true;
+  return level < ownBest;
+}
+
+/** 1 for h1, 2 for h2; null for anything the lift does not consider. */
+function headingRank(el: Element): 1 | 2 | null {
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'h1') return 1;
+  if (tag === 'h2') return 2;
+  return null;
+}
+
+/**
+ * Lowest h1–h2 rank under the root that is not furniture. null when none.
+ * Only h1–h2: those are the levels the lift itself will consider outside.
+ */
+function bestOwnHeadingLevel(
+  root: Element,
+  isVisible: (el: Element) => boolean,
+): 1 | 2 | null {
+  let best: 1 | 2 | null = null;
+  for (const h of root.querySelectorAll('h1, h2')) {
+    if (!root.contains(h)) continue;
+    if (!isVisible(h)) continue;
+    if (insideFurniture(h, root)) continue;
+    const rank = headingRank(h);
+    if (rank === null) continue;
+    if (best === null || rank < best) best = rank;
+    if (best === 1) return 1;
+  }
+  return best;
 }
 
 /**
@@ -383,17 +437,6 @@ function isPageBanner(el: Element): boolean {
 function isInsidePageBanner(el: Element, stop: Element): boolean {
   for (let p: Element | null = el; p && p !== stop; p = p.parentElement) {
     if (isPageBanner(p)) return true;
-  }
-  return false;
-}
-
-function hasOwnHeading(root: Element, isVisible: (el: Element) => boolean): boolean {
-  for (const h of root.querySelectorAll('h1, h2')) {
-    if (!root.contains(h)) continue;
-    if (!isVisible(h)) continue;
-    // A heading inside nested furniture does not count as the article's own.
-    if (insideFurniture(h, root)) continue;
-    return true;
   }
   return false;
 }

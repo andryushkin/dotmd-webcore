@@ -71,6 +71,46 @@ const CORPUS: Case[] = [
     },
   },
   {
+    // Title outside, section h2s inside — the ordinary article. Lift must still
+    // take the outer h1; refusing on any inside heading is the defect that left
+    // the document opening on a section under topHeadingLevel: 1.
+    file: 'heading-above-with-sections.html',
+    must: [
+      'How the reader picks an article',
+      'Why it matters',
+      'By A. Author',
+    ],
+    mustNot: ['SiteName Media Group', 'Sign in'],
+    check: (_doc, result) => {
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.nodes.length).toBe(2);
+      expect(result.nodes[0]!.tagName.toLowerCase()).toBe('h1');
+      expect(result.nodes[0]!.textContent).toContain('How the reader picks an article');
+      expect(result.nodes[1]!.tagName.toLowerCase()).toBe('article');
+      // Lifted h1 counts for the consumer that asks whether it got a whole document.
+      expect(result.metrics.hasH1).toBe(true);
+    },
+  },
+  {
+    // Outer h1 is a category; the article already has the real title as h1.
+    // Equal rank → do not lift.
+    file: 'heading-above-with-own-h1.html',
+    must: [
+      'The real title of this investigation',
+      'Laboratory samples collected over eighteen months',
+    ],
+    mustNot: ['Site or category', 'SiteName Media Group'],
+    check: (_doc, result) => {
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.nodes.length).toBe(1);
+      expect(result.nodes[0]!.tagName.toLowerCase()).toBe('article');
+      expect(result.metrics.hasH1).toBe(true);
+      expect(textOf(result.nodes)).not.toContain('Site or category');
+    },
+  },
+  {
     file: 'wide-main-furniture.html',
     must: [
       'An essay wrapped only in main',
@@ -314,5 +354,40 @@ describe('findArticle → highlightsToMd (selection profile)', () => {
     expect(md).toContain('How sectioning splits a title from its body');
     expect(md).toContain('paragraphs live inside the article element');
     expect(md).not.toContain('SiteName Media Group');
+  });
+
+  test('section h2s inside the article do not drop the outer title', () => {
+    const doc = load('heading-above-with-sections.html');
+    const found = findArticle(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    expect(found.nodes.length).toBe(2);
+    expect(found.metrics.hasH1).toBe(true);
+
+    const { md } = highlightsToMd(found.nodes, doc, {
+      exclude: found.exclude,
+      conversion: selectionConversion,
+    });
+    // Under topHeadingLevel: 1 the outer h1 is the document title; the section
+    // becomes ##. Without the lift, "Why it matters" would be raised to #.
+    expect(md).toMatch(/^#\s+How the reader picks an article/m);
+    expect(md).toContain('Why it matters');
+    expect(md.trimStart().startsWith('# Why it matters')).toBe(false);
+    expect(md).not.toContain('SiteName Media Group');
+  });
+
+  test('outer category h1 is not lifted when the article has its own h1', () => {
+    const doc = load('heading-above-with-own-h1.html');
+    const found = findArticle(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    expect(found.nodes.length).toBe(1);
+
+    const { md } = highlightsToMd(found.nodes, doc, {
+      exclude: found.exclude,
+      conversion: selectionConversion,
+    });
+    expect(md).toContain('The real title of this investigation');
+    expect(md).not.toContain('Site or category');
   });
 });

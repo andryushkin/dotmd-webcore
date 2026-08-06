@@ -310,6 +310,67 @@ describe('materializeCurrentSrc', () => {
     }
   });
 
+  it('leaves a filename placeholder alone so data-src survives (paired with isPlaceholder)', () => {
+    // The earlier isUsableCurrentSrc only refused data: URIs; the converter's
+    // isPlaceholder also refuses loading/spacer/… names. Without the pair,
+    // materialize wrote the placeholder into src, stripped data-src, and the
+    // reader got a grey square.
+    const doc = page(
+      `<img src="loading.gif" data-src="https://cdn.example.com/real-photo.jpg" alt="A photo" />`,
+    );
+    const range = doc.createRange();
+    range.selectNodeContents(doc.body);
+    const fragment = range.cloneContents();
+    materializeCurrentSrc(fragment, () => 'https://example.com/loading.gif');
+
+    const img = fragment.querySelector('img')!;
+    expect(img.getAttribute('src')).toBe('loading.gif');
+    expect(img.getAttribute('data-src')).toBe('https://cdn.example.com/real-photo.jpg');
+    expect(toMarkdown(fragment as unknown as Node).trim()).toBe(
+      '![A photo](https://cdn.example.com/real-photo.jpg)',
+    );
+  });
+
+  it('src placeholder + data-src real: pending lazy load keeps the real address', () => {
+    // currentSrc is still the markup src (absolute form); the loader has not
+    // fired. materialize must not strip data-src — that is the picture the
+    // document should hold. The toy name ph.gif does not match the placeholder
+    // regex; the pending-lazy check is what saves it.
+    const doc = page(
+      `<figure><img src="ph.gif" data-src="real-photo.jpg" alt="A photo"></figure>`,
+    );
+    const range = doc.createRange();
+    range.selectNodeContents(doc.body);
+    const fragment = range.cloneContents();
+    materializeCurrentSrc(fragment, () => 'https://example.com/ph.gif');
+
+    const img = fragment.querySelector('img')!;
+    expect(img.getAttribute('src')).toBe('ph.gif');
+    expect(img.getAttribute('data-src')).toBe('real-photo.jpg');
+    expect(toMarkdown(fragment as unknown as Node).trim()).toBe(
+      '![A photo](real-photo.jpg)',
+    );
+  });
+
+  it('materializes when currentSrc has already adopted the lazy address', () => {
+    // Loader fired: currentSrc is the real file. Write it and strip data-src so
+    // extractImageUrl cannot prefer a stale lazy attribute over the live file.
+    const doc = page(
+      `<img src="ph.gif" data-src="real-photo.jpg" alt="A photo" />`,
+    );
+    const range = doc.createRange();
+    range.selectNodeContents(doc.body);
+    const fragment = range.cloneContents();
+    materializeCurrentSrc(fragment, () => 'https://cdn.example.com/real-photo.jpg');
+
+    const img = fragment.querySelector('img')!;
+    expect(img.getAttribute('src')).toBe('https://cdn.example.com/real-photo.jpg');
+    expect(img.hasAttribute('data-src')).toBe(false);
+    expect(toMarkdown(fragment as unknown as Node).trim()).toBe(
+      '![A photo](https://cdn.example.com/real-photo.jpg)',
+    );
+  });
+
   it('does not strip unrelated data-* attributes', () => {
     const doc = page(
       `<img src="a.jpg" data-src="b.jpg" data-caption="a figure caption" data-id="42" />`,
