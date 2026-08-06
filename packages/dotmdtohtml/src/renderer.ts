@@ -174,9 +174,8 @@ export function createMarkdownRenderer(options: RendererOptions): MarkdownRender
   };
 
   // Headings of the render that is open, consumed in document order by the
-  // heading renderer. Collected after lexing so the plain text can see the math
-  // placeholders that render recorded; reset every render so a second pass of
-  // the same note does not continue the first pass's counters.
+  // heading renderer. Same save/restore rule as `open`: a nested render (nothing
+  // does this today) must not leave the outer parse reading the inner list.
   let openHeadings: readonly RenderedHeading[] = [];
   let headingAt = 0;
 
@@ -232,6 +231,8 @@ export function createMarkdownRenderer(options: RendererOptions): MarkdownRender
     for (const contribution of contributions) text = contribute(text, contribution);
     const run = beginMathRun();
     const previous = open;
+    const previousHeadings = openHeadings;
+    const previousHeadingAt = headingAt;
     open = run;
     openHeadings = [];
     headingAt = 0;
@@ -254,8 +255,8 @@ export function createMarkdownRenderer(options: RendererOptions): MarkdownRender
       };
     } finally {
       open = previous;
-      openHeadings = [];
-      headingAt = 0;
+      openHeadings = previousHeadings;
+      headingAt = previousHeadingAt;
     }
   }
 

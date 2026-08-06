@@ -159,6 +159,29 @@ describe('headingIds on', () => {
     expect(html).toContain('<h1 id="title-2">');
   });
 
+  // A per-base counter mints `step-1` for the second "Step" and then again for
+  // "Step 1", whose own slug is already `step-1`. Uniqueness has to be on the
+  // id handed out, not on how many times the base was seen.
+  test('a heading whose slug is another heading\'s suffix does not collide', () => {
+    const md = '## Step\n\n## Step\n\n## Step 1';
+    const { html, headings } = renderer({ headingIds: true }).render(md);
+    expect(headings.map((h) => h.id)).toEqual(['step', 'step-1', 'step-1-1']);
+    expect(new Set(headings.map((h) => h.id)).size).toBe(headings.length);
+    for (const h of headings) {
+      expect(html).toContain(`<h2 id="${h.id}">`);
+    }
+    // Two tags must not share an id — the markup, not only the list.
+    const ids = [...html.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1]);
+    expect(ids).toEqual(['step', 'step-1', 'step-1-1']);
+  });
+
+  test('the second-order case — two pairs that would cross — stays distinct', () => {
+    const md = '## Step\n\n## Step\n\n## Step 1\n\n## Step 1';
+    const { headings } = renderer({ headingIds: true }).render(md);
+    expect(headings.map((h) => h.id)).toEqual(['step', 'step-1', 'step-1-1', 'step-1-2']);
+    expect(new Set(headings.map((h) => h.id)).size).toBe(4);
+  });
+
   // The counter is per render: render the same document twice and both copies
   // start at `title`, not at whatever the first render left behind.
   test('a second render of the same note does not continue the counter', () => {

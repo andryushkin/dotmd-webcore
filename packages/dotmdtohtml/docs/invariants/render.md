@@ -260,11 +260,15 @@ product's, and none of it is here.
   received, in document order; the list and the markup are built from the same
   walk of the same token tree so they cannot disagree here. A list naming an id
   the markup does not contain is worse than no list at all.
-- **The counter is per render, never per renderer or per module.** The same
-  defect `RenderResult.math` was written to close: a module-wide map let a second
-  render hydrate its formulas into the first document's placeholders. A heading
-  counter with the same scope mints `title-2` on a second render of the same
-  note, and every link in the table of contents points nowhere.
+- **Uniqueness is per render, on the id handed out, never on a per-base count.**
+  The same defect `RenderResult.math` was written to close: a module-wide map let
+  a second render hydrate its formulas into the first document's placeholders. A
+  heading counter with that scope mints `title-2` on a second render of the same
+  note, and every link in the table of contents points nowhere. Counting how many
+  times a *base* was seen is the other half of the defect: the second `## Step`
+  becomes `step-1`, then `## Step 1` — whose own slug is already `step-1` — takes
+  the same id again. Every candidate is checked against the set of ids already
+  written in this render; the suffix climbs until the slot is free.
 - **`headingSlug(text)` is pure and exported; uniqueness is not its job.** A
   second package reads a live page's internal links and hands back heading
   *text* — no slug, because it must not depend on this one. The consumer joins

@@ -99,15 +99,28 @@ export function headingPlainText(tokens: readonly WalkToken[] | undefined, run: 
 /**
  * Every heading in the token tree, in the order `marked` will render them, each
  * with a unique id for this render alone.
+ *
+ * Uniqueness is on the *answer*, not on a per-base counter. Counting how many
+ * times `step` has been seen and minting `step-1` for the second would collide
+ * with a later heading whose own slug is already `step-1` (`## Step 1`). Every
+ * candidate is checked against the set of ids already handed out; the suffix
+ * climbs until the slot is free. That loop always terminates: each try either
+ * takes an unused string or advances the suffix, and only finitely many ids
+ * have been used.
  */
 export function collectHeadings(tokens: readonly WalkToken[], run: MathRun): RenderedHeading[] {
   const headings: RenderedHeading[] = [];
-  const seen = new Map<string, number>();
+  const used = new Set<string>();
 
   const uniquify = (base: string): string => {
-    const n = seen.get(base) ?? 0;
-    seen.set(base, n + 1);
-    return n === 0 ? base : `${base}-${n}`;
+    let id = base;
+    let n = 0;
+    while (used.has(id)) {
+      n += 1;
+      id = `${base}-${n}`;
+    }
+    used.add(id);
+    return id;
   };
 
   const walk = (list: readonly WalkToken[]): void => {
