@@ -126,6 +126,15 @@ interface Scored {
  * class penalty for `card|teaser|related|promo` move the ranking; a ratio to
  * `body` may add to the score and never subtracts — an article can legitimately
  * be a tenth of the page when the rest is comments and an infinite feed.
+ *
+ * When the page has no semantic candidates at all — older blogs, hand-written
+ * sites, anything that never adopted `<main>` / `<article>` — the same scorer
+ * runs over block containers that already hold paragraphs. Widening only then
+ * (not when a thin semantic candidate exists) is deliberate: a teaser
+ * `[role="main"]` must still lose to a real `articleBody`, and a thin `<main>`
+ * must still refuse rather than fall through to `<div id="app">`. Taking `body`
+ * and trimming it is not a candidate path either — that is the SPA / docs
+ * failure the semantic-only list was narrowed to avoid.
  */
 export function findArticle(
   doc: Document,
@@ -163,7 +172,9 @@ export function findArticle(
   // holds the title or a strip of chrome. Prefer the more specific descendant
   // when it already carries most of the text — heading lift recovers a title
   // that sat outside, and a feed shell yields its longest leaf instead of
-  // twelve teasers glued together.
+  // twelve teasers glued together. The same rule is what stops a block-fallback
+  // winner from being the page shell (`#wrapper`) when `#primary` already holds
+  // most of its prose.
   const winner = preferSpecific(scored);
   const metrics: ArticleMetrics = {
     textLength: winner.textLength,
@@ -205,6 +216,9 @@ export function findArticle(
   };
 }
 
+/** Cap on block-fallback candidates so a div-soup page is not scored node-by-node. */
+const MAX_BLOCK_CANDIDATES = 48;
+
 function collectCandidates(doc: Document, body: Element): Element[] {
   const seen = new Set<Element>();
   const out: Element[] = [];
@@ -230,7 +244,52 @@ function collectCandidates(doc: Document, body: Element): Element[] {
     add(el);
   }
 
-  return out;
+  if (out.length > 0) return out;
+
+  // No landmark, no schema: older blogs and hand-written pages. The scorer
+  // already ranks by prose; give it block containers that hold paragraphs.
+  // Only in this branch — see findArticle's note on why a thin semantic
+  // candidate does not open the net.
+  return collectBlockCandidates(body);
+}
+
+/**
+ * Block containers that already look like prose columns. Used only when the
+ * page exposes no semantic article root.
+ *
+ * Every `div` is too many on a large DOM; every element with text would pick
+ * link strips. Requiring at least one non-empty `<p>` is the cheap filter that
+ * matches what the density bonus already rewards, and a hard cap keeps the
+ * walk bounded. Furniture and the page banner stay out so a sidebar calendar
+ * or site header cannot win by accident.
+ */
+function collectBlockCandidates(body: Element): Element[] {
+  const raw: Element[] = [];
+  for (const el of body.querySelectorAll('div, section')) {
+    if (el === body) continue;
+    if (isFurnitureSignal(el)) continue;
+    if (isPageBanner(el)) continue;
+    if (!hasNonEmptyParagraph(el)) continue;
+    raw.push(el);
+  }
+
+  if (raw.length <= MAX_BLOCK_CANDIDATES) return raw;
+
+  // Too many: keep the paragraph-richest, then longest. Full scoring runs only
+  // on this shortlist.
+  raw.sort((a, b) => {
+    const dp = countParagraphs(b, () => true) - countParagraphs(a, () => true);
+    if (dp !== 0) return dp;
+    return visibleTextLength(b) - visibleTextLength(a);
+  });
+  return raw.slice(0, MAX_BLOCK_CANDIDATES);
+}
+
+function hasNonEmptyParagraph(root: Element): boolean {
+  for (const p of root.getElementsByTagName('p')) {
+    if ((p.textContent ?? '').trim().length > 0) return true;
+  }
+  return false;
 }
 
 function scoreCandidate(
@@ -464,6 +523,20 @@ function bestOwnHeadingLevel(
 }
 
 /**
+ * Body-level site-header ids used by older blogs that never wrote `<header>`.
+ * Matched only when the element is not nested inside sectioning content — the
+ * same rule as for `<header>` — so an in-article `#header` still contributes.
+ * `#smallhead` is the concrete case: simonwillison.net puts the site name in
+ * a div, and without this the block-fallback lift walked body and opened the
+ * document on "Simon Willison's Weblog".
+ */
+const SITE_BANNER_ID =
+  /^(header|site-?header|masthead|banner|top-?bar|smallhead|site-?title|branding)$/i;
+
+const SITE_BANNER_CLASS =
+  /\b(site-?header|masthead|site-branding)\b/i;
+
+/**
  * The page-wide banner — site name, logo, top nav — not the article's title.
  *
  * `role="banner"` says so explicitly. A `<header>` that is not nested inside
@@ -471,12 +544,22 @@ function bestOwnHeadingLevel(
  * as a child of `body` (or of a wrapper under body), while an article title
  * header sits inside `<main>` / `<article>` / `<section>`. Without this, the
  * lift walk reaches body as the sectioning parent and pulls "My Cool Website"
- * in as the document title.
+ * in as the document title. The same nesting rule applies to the body-level
+ * site-header divs older blogs use in place of `<header>`.
  */
 function isPageBanner(el: Element): boolean {
   const role = (el.getAttribute('role') ?? '').toLowerCase();
   if (role === 'banner') return true;
-  if (el.tagName.toLowerCase() !== 'header') return false;
+
+  const tag = el.tagName.toLowerCase();
+  const id = el.getAttribute('id') ?? '';
+  const className = el.getAttribute('class') ?? '';
+  const looksLikeBanner =
+    tag === 'header' ||
+    SITE_BANNER_ID.test(id) ||
+    SITE_BANNER_CLASS.test(className);
+  if (!looksLikeBanner) return false;
+
   for (let p = el.parentElement; p; p = p.parentElement) {
     const t = p.tagName.toLowerCase();
     if (t === 'article' || t === 'aside' || t === 'nav' || t === 'section' || t === 'main') {
@@ -630,7 +713,97 @@ function isFurnitureSignal(el: Element): boolean {
   if (role === 'navigation' || role === 'complementary' || role === 'contentinfo') {
     return true;
   }
-  return FURNITURE_CLASS.test(el.getAttribute('class') ?? '');
+  if (FURNITURE_CLASS.test(el.getAttribute('class') ?? '')) return true;
+  // Language switcher, "also on the web" — interface no tag marks as such.
+  return isOffDocumentLinkStrip(el);
+}
+
+/**
+ * A dense strip of off-document links with essentially no prose of its own.
+ *
+ * Wikipedia's language button (`#p-lang-btn`) is the case that forced this:
+ * eighty external language names, zero paragraphs, labelled "81 languages",
+ * sitting beside the title inside `<main>` so the capture opened on chrome.
+ * Distinguished from a references list or a "further reading" section by the
+ * share of characters that are link labels (most of the strip) and by having
+ * almost no `<p>` prose. Same-document TOC lists fail the external ratio and
+ * are handled by {@link isTableOfContents}.
+ */
+function isOffDocumentLinkStrip(el: Element): boolean {
+  const links = el.querySelectorAll('a[href]');
+  if (links.length < 4) return false;
+
+  // A title header that also holds a language switcher is not itself a strip —
+  // Wikipedia's `vector-page-titlebar` wraps the h1 beside `#p-lang-btn`. Dropping
+  // the whole header cost the document its title.
+  if (el.querySelector('h1, h2, h3')) return false;
+
+  const base = el.ownerDocument?.baseURI ?? undefined;
+  const docUrl = documentAddress(el.ownerDocument);
+  let total = 0;
+  let external = 0;
+  let linkTextLen = 0;
+  for (const a of links) {
+    const raw = a.getAttribute('href');
+    if (raw === null || raw === '') continue;
+    total += 1;
+    if (!isSameDocumentFragment(raw, base, docUrl) && !isSameDocumentPage(raw, base, docUrl)) {
+      external += 1;
+    }
+    linkTextLen += (a.textContent ?? '').replace(/\s+/g, ' ').trim().length;
+  }
+  if (total < 4 || external / total < 0.8) return false;
+
+  // Visible text of the element, counting its own descendants. A strip whose
+  // characters are mostly link labels is chrome; mixed prose is not.
+  let elText = 0;
+  const walk = (node: Node): void => {
+    if (node.nodeType === 3) {
+      elText += (node.textContent ?? '').replace(/\s+/g, ' ').trim().length;
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    const tag = (node as Element).tagName.toLowerCase();
+    if (SKIP_TEXT_TAGS.has(tag)) return;
+    for (let c = node.firstChild; c; c = c.nextSibling) walk(c);
+  };
+  walk(el);
+  if (elText < 40) return false;
+  if (linkTextLen / elText < 0.7) return false;
+
+  // Two real paragraphs → more like a body "further reading" block.
+  let paragraphs = 0;
+  for (const p of el.getElementsByTagName('p')) {
+    if ((p.textContent ?? '').trim().length > 0) paragraphs += 1;
+    if (paragraphs >= 2) return false;
+  }
+  return true;
+}
+
+/**
+ * Same document at the page level (path + query), including bare paths without
+ * a fragment. Used by the off-document link strip so an in-site nav of ordinary
+ * links is not mistaken for a language switcher; fragment-only comparison is
+ * the wrong test there because a nav to `/about` is same-site but not a TOC.
+ */
+function isSameDocumentPage(
+  rawHref: string,
+  baseURI: string | undefined,
+  docUrl: URL | null,
+): boolean {
+  if (!docUrl) {
+    return rawHref.startsWith('#') || rawHref.startsWith('/') || !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(rawHref);
+  }
+  try {
+    const resolved = baseURI ? new URL(rawHref, baseURI) : new URL(rawHref, docUrl.href);
+    const linkKey = resolved.origin + resolved.pathname + resolved.search;
+    const docKey = docUrl.origin + docUrl.pathname + docUrl.search;
+    // Same path, or a same-origin path without claiming a different site.
+    if (linkKey === docKey) return true;
+    return resolved.origin === docUrl.origin;
+  } catch {
+    return rawHref.startsWith('#') || rawHref.startsWith('/');
+  }
 }
 
 function insideFurniture(el: Element, root: Element): boolean {
@@ -641,13 +814,24 @@ function insideFurniture(el: Element, root: Element): boolean {
 }
 
 /**
- * A nav whose links mostly jump inside this document — the documentation TOC
- * the corpus requires to survive. External "read next" strips fail this.
+ * A list of same-document fragment links — the documentation table of contents
+ * the corpus requires to survive.
+ *
+ * Class names alone are not enough. Wikipedia's titlebar control is
+ * `class="… vector-toc-landmark"` with a "Toggle the table of contents" button
+ * and zero fragment links; the old class short-circuit protected that chrome
+ * and the capture opened on the toggle label. A document TOC (MDN's
+ * `reference-toc`, the hand-written `docs-toc-survives` fixture) still has a
+ * real list of in-page `#` links and passes the ratio. Site chrome that also
+ * happens to list the headings (Wikipedia's sidebar) sits *outside* the
+ * article root on pages that mark `<main>`, and when it does fall inside a
+ * wide root it is furniture for the same reason the titlebar is: the reader
+ * already gets a TOC from the headings themselves. We do not special-case the
+ * sidebar further — the link test alone would still call it a TOC, which is
+ * the honest reading of a fragment list; exclusion there depends on it not
+ * being the chosen root's body.
  */
 function isTableOfContents(el: Element): boolean {
-  const className = el.getAttribute('class') ?? '';
-  if (/\b(toc|table-of-contents|document-toc)\b/i.test(className)) return true;
-
   const links = el.querySelectorAll('a[href]');
   if (links.length < 2) return false;
   let internal = 0;
@@ -707,20 +891,38 @@ function uniqueSelector(el: Element, root: Element): string | null {
 
   const tag = el.tagName.toLowerCase();
   const className = el.getAttribute('class') ?? '';
-  const token = className
+  const tokens = className
     .trim()
     .split(/\s+/)
-    .find((t) => t && FURNITURE_CLASS.test(t) && !/["'\\]/.test(t));
-  if (token) {
+    .filter((t) => t && !/["'\\]/.test(t));
+  // Furniture-class tokens first, then any class. A class that matches a few
+  // siblings (Wikipedia pins the same tools nav in the toolbar and the column)
+  // is better than an nth-of-type path: exclude runs the selectors in order,
+  // and removing one nav shifts the index of the next so the path misses.
+  // A class token that may match several pinned/unpinned copies of the same
+  // chrome (Wikipedia tools nav). Generic tokens like `container` must stay
+  // unique-only, or a single furniture hit would drop four layout columns.
+  const MULTI_MATCH_CLASS = /landmark|portlet|pinnable|tools|appearance/i;
+  const ordered = [
+    ...tokens.filter((t) => FURNITURE_CLASS.test(t)),
+    ...tokens,
+  ];
+  const seenToken = new Set<string>();
+  for (const token of ordered) {
+    if (seenToken.has(token)) continue;
+    seenToken.add(token);
     const sel = `${tag}.${cssEscapeIdent(token)}`;
     try {
-      if (root.querySelectorAll(sel).length === 1) return sel;
+      const n = root.querySelectorAll(sel).length;
+      if (n === 1) return sel;
+      if (n > 1 && n <= 4 && MULTI_MATCH_CLASS.test(token)) return sel;
     } catch {
       // fall through
     }
   }
 
-  // nth-of-type path from root — last resort, stable for a single capture.
+  // nth-of-type path from root — last resort. Fragile under sequential
+  // exclusion of siblings; prefer ids and classes above whenever possible.
   const parts: string[] = [];
   let cur: Element | null = el;
   while (cur && cur !== root) {

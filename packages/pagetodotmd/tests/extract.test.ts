@@ -225,6 +225,24 @@ const CORPUS: Case[] = [
       ).toBe(true);
     },
   },
+  {
+    // No <main>, no <article>, no schema — only div#primary with paragraphs.
+    // The block-fallback path must accept it; preferSpecific must take primary
+    // over wrapper; the site name in #smallhead must not be lifted.
+    file: 'no-semantic-div-blog.html',
+    must: [
+      'A post with no semantic tags around it',
+      'laboratory samples collected over eighteen months',
+    ],
+    mustNot: ['My Cool Website', 'calendar chrome that is not the article'],
+    check: (_doc, result) => {
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.nodes.some((n) => n.id === 'primary')).toBe(true);
+      expect(result.nodes.some((n) => n.id === 'wrapper')).toBe(false);
+      expect(textOf(result.nodes)).not.toContain('My Cool Website');
+    },
+  },
 ];
 
 describe('findArticle corpus', () => {
@@ -433,5 +451,109 @@ describe('findArticle → highlightsToMd (selection profile)', () => {
     expect(md).toContain('A section inside the body');
     expect(md.trimStart().startsWith('# A deck')).toBe(false);
     expect(md).not.toContain('SiteName Media Group');
+  });
+
+  test('no-semantic div blog: primary column reaches Markdown without the site name', () => {
+    const doc = load('no-semantic-div-blog.html');
+    const found = findArticle(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+
+    const { md } = highlightsToMd(found.nodes, doc, {
+      exclude: found.exclude,
+      conversion: selectionConversion,
+    });
+    expect(md).toContain('A post with no semantic tags around it');
+    expect(md).toContain('laboratory samples collected over eighteen months');
+    expect(md).not.toContain('My Cool Website');
+    expect(md.trimStart().startsWith('# My Cool Website')).toBe(false);
+  });
+});
+
+/**
+ * Frozen copies of live pages (downloaded once). A live site drifts — these
+ * files are the evidence for the two defects, not a contract with the network.
+ * Assert on substrings and the opening lines, never full snapshots: the HTML is
+ * hundreds of kilobytes.
+ */
+describe('findArticle on frozen real pages', () => {
+  const REAL = join(dirname(fileURLToPath(import.meta.url)), 'real-pages');
+  const selectionConversion = {
+    mode: 'selection' as const,
+    topHeadingLevel: 1,
+  };
+
+  function loadReal(name: string, url: string): Document {
+    const html = readFileSync(join(REAL, name), 'utf8');
+    const window = new Window({ url });
+    window.document.write(html);
+    return window.document as unknown as Document;
+  }
+
+  function capture(doc: Document): { found: ReturnType<typeof findArticle>; md: string } {
+    const found = findArticle(doc);
+    if (!found.ok) return { found, md: '' };
+    const { md } = highlightsToMd(found.nodes, doc, {
+      exclude: found.exclude,
+      conversion: selectionConversion,
+    });
+    return { found, md };
+  }
+
+  test('simonwillison.net day archive: no semantic tags, still a document', () => {
+    // Before: refuse no-candidates. The page is div#wrapper / #primary only.
+    const doc = loadReal(
+      'simonwillison.net_2026_Jan_1_.html',
+      'https://simonwillison.net/2026/Jan/1/',
+    );
+    const { found, md } = capture(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    expect(found.nodes.some((n) => n.id === 'primary')).toBe(true);
+    // Opens on the day heading, not the site name in #smallhead.
+    expect(md.trimStart().startsWith('#')).toBe(true);
+    expect(md).toMatch(/^#\s+Thursday, 1st January 2026/m);
+    expect(md).toContain('gisthost');
+    expect(md).not.toContain("Simon Willison’s Weblog");
+    expect(md).not.toContain('Simon Willison\'s Weblog');
+  });
+
+  test('MDN CSS cascade: title first, in-page TOC kept, no chrome regression', () => {
+    const doc = loadReal(
+      'developer.mozilla.org_en-US_docs_Web_CSS.html',
+      'https://developer.mozilla.org/en-US/docs/Web/CSS',
+    );
+    const { found, md } = capture(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    expect(md.trimStart().startsWith('# Introduction to the CSS cascade')).toBe(true);
+    expect(md).toContain('In this article');
+    expect(md).toContain('Cascading order');
+    // Must not pick up site chrome that lives outside main.
+    expect(md).not.toContain('Toggle the table of contents');
+  });
+
+  test('Wikipedia Diffusion: title first, no TOC toggle or language switcher', () => {
+    // Before: opened on "Toggle the table of contents" / "81 languages" because
+    // isTableOfContents trusted a class name and the language strip had no
+    // furniture tag. The document TOC exemption must keep MDN working (above)
+    // while these site-chrome controls are excluded.
+    const doc = loadReal(
+      'en.wikipedia.org_wiki_Diffusion.html',
+      'https://en.wikipedia.org/wiki/Diffusion',
+    );
+    const { found, md } = capture(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    const head = md.trimStart().slice(0, 400);
+    expect(md.trimStart().startsWith('# Diffusion')).toBe(true);
+    expect(head).not.toContain('Toggle the table of contents');
+    expect(head).not.toContain('81 languages');
+    expect(head).not.toContain('Tools');
+    expect(md).not.toContain('Toggle the table of contents');
+    // Language names from the switcher must not lead the file.
+    expect(md.trimStart().startsWith('81 languages')).toBe(false);
+    // Article prose still present.
+    expect(md).toMatch(/diffusi/i);
   });
 });

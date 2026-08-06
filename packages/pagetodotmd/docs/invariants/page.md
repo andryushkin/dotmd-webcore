@@ -324,6 +324,19 @@ want "the article on this page"; neither should re-score the DOM alone.
   never vetoes — an article can legitimately be a tenth of the page when the rest
   is comments and a feed. A container that holds several substantial nested
   articles is penalised as a feed shell so one leaf wins.
+- **When no semantic candidate exists, the same scorer looks at block
+  containers.** Older blogs and hand-written sites ship `<div id="primary">`
+  with no `<main>`, no `<article>`, no schema — refusing with `no-candidates`
+  there is a wrong document the reader can see is an article. The net widens
+  **only** in that empty case: a thin semantic candidate must still refuse or
+  lose inside the semantic set, not fall through to `<div id="app">`. Taking
+  `body` and trimming it is not a path — that is the SPA / docs failure the
+  semantic-only list was narrowed to avoid. Block candidates are `div` /
+  `section` nodes that already hold a non-empty `<p>`, not furniture and not
+  the page banner, capped so a div-soup page is not scored node-by-node.
+  `preferSpecific` is what keeps `#wrapper` from winning when `#primary`
+  already holds most of its prose (the same rule that prefers an `<article>`
+  inside a wide `<main>`). A page with no paragraphs still refuses.
 - **The result is a list of nodes, not a single root.** Ordinary markup puts the
   title outside the body (`<main><h1>…</h1><article>…</article></main>`). The
   scorer honestly picks `<article>` where the paragraphs live; a capture of that
@@ -344,11 +357,14 @@ want "the article on this page"; neither should re-score the DOM alone.
   **Never out of the page banner.** `role="banner"` is explicit; a `<header>`
   that is not nested inside sectioning content or `<main>` is the same thing
   (the ordinary blog is `<body><header><h1>Site</h1></header><article>`, with no
-  `<main>`, and lifting that h1 opened the document on the site name). A title
-  header *inside* `<main>` is not a banner and may still yield its h1. A lifted
-  `h1` sets `metrics.hasH1` so a consumer that asks whether it got a whole
-  document sees the title that was outside the root. Capture already takes the
-  contents of each element it is handed (`highlightsToMd`), so
+  `<main>`, and lifting that h1 opened the document on the site name). The same
+  rule covers body-level site-header *divs* older blogs use in place of
+  `<header>` (`#smallhead`, `#masthead`, …): without it, the block-fallback
+  path picked `#primary` and the lift walked body and opened on the site name.
+  A title header *inside* `<main>` is not a banner and may still yield its h1. A
+  lifted `h1` sets `metrics.hasH1` so a consumer that asks whether it got a
+  whole document sees the title that was outside the root. Capture already takes
+  the contents of each element it is handed (`highlightsToMd`), so
   `[h1, h2, article]` arrives intact; joining several fragments already exists
   (`join-fragments.ts`).
 - **Furniture inside a wide root is a list of selectors, not a rewrite.** When a
@@ -367,6 +383,17 @@ want "the article on this page"; neither should re-score the DOM alone.
   documentation TOC and a list of sources have the same density, and density
   alone would cut the wanted half. The suite asserts the furniture is gone from
   the Markdown after `highlightsToMd`, not merely from the selector list.
+- **A document TOC is a list of same-document fragment links, not a class
+  name.** The class short-circuit (`toc` / `table-of-contents`) protected
+  Wikipedia's titlebar control — `vector-toc-landmark` with a "Toggle the table
+  of contents" button and zero fragment links — so the capture opened on chrome.
+  MDN's `reference-toc` and the hand-written docs fixture still pass because
+  they *are* lists of in-page `#` links. Site chrome that also lists headings
+  (Wikipedia's sidebar) usually sits outside `<main>`; when it falls inside a
+  wide root the reader already gets a TOC from the headings themselves. A dense
+  strip of *off-document* links with no prose of its own (the language switcher
+  beside the title) is furniture even without a landmark tag — but a parent that
+  also holds the `h1` is not itself that strip, or the title goes with it.
 - **Visibility is an injected predicate.** Defaults to "everything is visible".
   Under linkedom and happy-dom a `display: none` node still contributes text, so
   a default that tried to read the cascade here would claim a certainty the
