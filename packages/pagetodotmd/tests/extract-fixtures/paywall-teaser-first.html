@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Paywall first</title></head>
+<body>
+  <div role="main" class="teaser paywall-banner">
+    <h2>Subscribe to keep reading</h2>
+    <p>This short teaser appears first in the DOM and claims role=main.</p>
+  </div>
+  <article itemprop="articleBody">
+    <h1>The investigation the paywall is hiding</h1>
+    <p>Past the banner sits the real article, marked as the schema.org article body and carrying the paragraphs a reader actually wants.</p>
+    <p>First-match on role=main would hand the overlay a success built from the subscribe blurb while the investigation disappeared entirely.</p>
+    <p>Scoring by visible text length, paragraph density, and a class penalty for teaser-like tokens is what keeps the banner from winning.</p>
+    <p>Four solid paragraphs are enough for the scorer to prefer this root over the short paywall card above it without any site-specific selector.</p>
+  </article>
+</body>
+</html>

@@ -274,3 +274,88 @@ The other half of this pair is under *Rows drawn side by side* in
   property, and these paths are also exercised under happy-dom, where it is `undefined` for assigned
   and unassigned children alike. Nothing is lifted where a matching slot exists — an unrendered
   child costs a duplicated line, a rendered one lifted by mistake costs the sentence it held.
+
+## Article extraction
+
+Free functions a consumer calls *before* capture. They must not run as a side
+effect of `selectionToCapture` or `highlightsToMd` — those paths keep their
+signatures and their output byte for byte. The clipper and a reading mode both
+want "the article on this page"; neither should re-score the DOM alone.
+
+- **`findArticle(doc)` scores candidates, never first-match.** Candidates are
+  `<main>`, `<article>`, `[role="main"]`, `[itemprop="articleBody"]`, and
+  schema.org Article-typed nodes. A feed wraps a dozen `<article>`s in `<main>`,
+  and plenty of pages put a teaser or paywall banner first under `[role="main"]`.
+  First match hands back somebody else's short paragraph while the article
+  disappears and the overlay reports success. Length of *visible* text is the
+  primary score; an `h1`, paragraph density, and a class penalty for
+  `card|teaser|related|promo` move the ranking; a ratio to `body` may *add* and
+  never vetoes — an article can legitimately be a tenth of the page when the rest
+  is comments and a feed. A container that holds several substantial nested
+  articles is penalised as a feed shell so one leaf wins.
+- **The result is a list of nodes, not a single root.** Ordinary markup puts the
+  title outside the body (`<main><h1>…</h1><article>…</article></main>`). The
+  scorer honestly picks `<article>` where the paragraphs live; a capture of that
+  root alone ships a document with no title and a length that still passed every
+  threshold. The heading is lifted under a narrow rule only: an `h1`–`h2` (never
+  a whole `<header>` — that holds the logo, breadcrumbs and sign-in), only when
+  the root has no heading of its own, only the nearest preceding one under the
+  same sectioning parent, with no other `<article>` between them. Capture already
+  takes the contents of each element it is handed (`highlightsToMd`), so
+  `[h1, article]` arrives intact; joining several fragments already exists
+  (`join-fragments.ts`).
+- **Furniture inside a wide root is a list of selectors, not a rewrite.** When a
+  site wraps everything in `<main>`, the capture would keep the `<nav>`, the
+  newsletter `<aside>` and the "read next" strip. `CaptureOptions.exclude`
+  already drops selectors from the clone; what was missing is the list, and the
+  thing that picked the root builds it. Conjunction of signals: a semantic tag
+  (`nav` / `aside` / `footer`) or a furniture class, *and* a position outside the
+  accepted body (little of the root's paragraph text), *and* not a same-document
+  table of contents. Link density alone is not enough — a documentation TOC and a
+  list of sources have the same density, and density alone would cut the wanted
+  half.
+- **Visibility is an injected predicate.** Defaults to "everything is visible".
+  Under linkedom and happy-dom a `display: none` node still contributes text, so
+  a default that tried to read the cascade here would claim a certainty the
+  harness cannot give. A real browser injects the answer from `getComputedStyle`,
+  the same shape `computedStyleIn(view)` already uses for the snapshot.
+- **Refusal hands back numbers, not a product policy.** Soft floor on visible
+  text (`DEFAULT_MIN_TEXT_LENGTH`, overridable; `0` never refuses on length). The
+  metrics always accompany a refusal so a consumer can set its own threshold and
+  show "nothing readable" instead of an empty overlay. Hard refuse when the
+  chosen root *is* an `iframe` or a `canvas` with almost no prose — that is a
+  wrong document, not a short one.
+- **Declared limits — what this cannot catch.** A closed shadow root is
+  indistinguishable from an empty host; a page rendered into `<canvas>` or an
+  article inside an `iframe` will happily reach any length threshold on menus and
+  fallback text and hand back a wrong document rather than a refusal, except for
+  the honest rule above when the chosen root itself is that `iframe` or `canvas`.
+  The corpus under `tests/extract-fixtures/` states a hit rate on hand-written
+  shapes; it does not measure a live cascade.
+
+## Fragment ids
+
+- **`collectFragmentIds(doc)` is a free function**, not a field on the capture
+  result. The Markdown round trip loses `id`s (`normalizeFragment` in the
+  converter strips cloned ids), so the map from an original `id` to what it
+  should become has to be taken from the live page — after conversion there is
+  nothing left to rebuild it from.
+- **Internal-ness is one rule for bare hashes and absolute URLs.** By the time
+  anything is rendered, `resolveUrl` has already run every relative through
+  `new URL(url, baseUrl)`, so `href.startsWith('#')` never fires on the converted
+  markup. A raw `#id` is not "internal" either: with
+  `<base href="https://cdn.example/…">` the fragment resolves against that base
+  and points into another document. Resolve every `href` through
+  `new URL(raw, document.baseURI)`, drop the hash from both the link and the
+  *document* address (`document.URL`, not `baseURI`), and compare the serialized
+  `origin + pathname + search`. Do not decode the path or the query; do not
+  equate `/a` with `/a/`. Percent-encoded *fragments* are decoded for lookup, and
+  a malformed encoding must not throw.
+- **No slug is computed here.** The slug an anchor must match is printed by
+  `dotmdtohtml` when it renders the document. This package does not depend on
+  `dotmdtohtml` and must not start to — a second slug implementation is the drift
+  "Keep in sync" exists to prevent. What is handed back is the original `id`, the
+  tag name, and heading text where the target *is* a heading. The consumer joins
+  by text. A non-heading target (paragraph, figure, footnote item) has no
+  counterpart after the round trip; the honest behaviour is to leave that link
+  pointing at the original page.

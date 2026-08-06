@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Library manual</title></head>
+<body>
+  <main>
+    <article>
+      <nav id="toc" class="toc table-of-contents">
+        <h2>On this page</h2>
+        <a href="#intro">Introduction</a>
+        <a href="#install">Install</a>
+        <a href="#api">API</a>
+      </nav>
+      <h1 id="intro">Introduction</h1>
+      <p>This manual describes the public surface of the library and how a caller is expected to wire the pieces together.</p>
+      <p>The table of contents is a nav of same-document fragment links and must survive extraction even though its link density looks like furniture.</p>
+      <h2 id="install">Install</h2>
+      <p>Install the package from the workspace and import the functions from the package root. No separate build step is required for consumers that read TypeScript from source.</p>
+      <h2 id="api">API</h2>
+      <p>The API is a small set of free functions. Nothing registers itself on import and nothing reads a global document at module scope.</p>
+      <p>Callers that already hold a live document pass it in; tests build a document under happy-dom and pass that instead.</p>
+    </article>
+    <aside class="related promo" id="see-also">
+      <h2>See also</h2>
+      <a href="https://other.example/guide">Unrelated guide</a>
+      <a href="https://other.example/blog">Blog</a>
+    </aside>
+  </main>
+</body>
+</html>

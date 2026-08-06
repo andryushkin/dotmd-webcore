@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Title above body</title></head>
+<body>
+  <header id="site-header">
+    <p class="logo">SiteName Media Group</p>
+    <nav><a href="/">Home</a><a href="/login">Sign in</a></nav>
+  </header>
+  <main>
+    <h1>How sectioning splits a title from its body</h1>
+    <article>
+      <p>The paragraphs live inside the article element, which is what a length scorer will prefer.</p>
+      <p>The document title sits one level up as a sibling heading, and a capture of the article alone would drop it.</p>
+      <p>Lifting only the nearest preceding h1 under the same sectioning parent keeps the title without dragging in the site header logo and menus.</p>
+      <p>More body text keeps this root well above any soft length floor the consumer might set for a refusal.</p>
+    </article>
+  </main>
+</body>
+</html>

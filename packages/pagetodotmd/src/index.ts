@@ -64,3 +64,22 @@ export {
 } from './shadow-selection.js';
 
 export { joinFragments } from './join-fragments.js';
+
+// --- article extraction (stage2) — keep this block at the end of the file ---
+export {
+  findArticle,
+  visibleTextLength,
+  DEFAULT_MIN_TEXT_LENGTH,
+  type ArticleFound,
+  type ArticleMetrics,
+  type ArticleRefusal,
+  type ArticleRefused,
+  type ArticleResult,
+  type FindArticleOptions,
+} from './extract.js';
+
+export {
+  collectFragmentIds,
+  type CollectFragmentIdsOptions,
+  type FragmentTarget,
+} from './fragment-ids.js';
