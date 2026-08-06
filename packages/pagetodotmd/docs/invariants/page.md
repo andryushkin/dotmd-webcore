@@ -297,11 +297,15 @@ want "the article on this page"; neither should re-score the DOM alone.
   title outside the body (`<main><h1>…</h1><article>…</article></main>`). The
   scorer honestly picks `<article>` where the paragraphs live; a capture of that
   root alone ships a document with no title and a length that still passed every
-  threshold. The heading is lifted under a narrow rule only: an `h1`–`h2` (never
-  a whole `<header>` — that holds the logo, breadcrumbs and sign-in), only when
-  the root has no heading of its own, only the nearest preceding one under the
-  same sectioning parent, with no other `<article>` between them. Capture already
-  takes the contents of each element it is handed (`highlightsToMd`), so
+  threshold. The heading is lifted under a narrow rule only: an `h1`–`h2`, only
+  when the root has no heading of its own, only the nearest preceding one under
+  the same sectioning parent, with no other `<article>` between them — and
+  **never out of the page banner**. `role="banner"` is explicit; a `<header>`
+  that is not nested inside sectioning content or `<main>` is the same thing
+  (the ordinary blog is `<body><header><h1>Site</h1></header><article>`, with no
+  `<main>`, and lifting that h1 opened the document on the site name). A title
+  header *inside* `<main>` is not a banner and may still yield its h1. Capture
+  already takes the contents of each element it is handed (`highlightsToMd`), so
   `[h1, article]` arrives intact; joining several fragments already exists
   (`join-fragments.ts`).
 - **Furniture inside a wide root is a list of selectors, not a rewrite.** When a
@@ -310,10 +314,16 @@ want "the article on this page"; neither should re-score the DOM alone.
   already drops selectors from the clone; what was missing is the list, and the
   thing that picked the root builds it. Conjunction of signals: a semantic tag
   (`nav` / `aside` / `footer`) or a furniture class, *and* a position outside the
-  accepted body (little of the root's paragraph text), *and* not a same-document
-  table of contents. Link density alone is not enough — a documentation TOC and a
-  list of sources have the same density, and density alone would cut the wanted
-  half.
+  accepted body, *and* not a same-document table of contents. "Outside the body"
+  is a **visible-text** share (≥ ¼ of the root's characters, and only when the
+  element itself has at least ~120 characters), not a paragraph count: on a
+  three-paragraph post one newsletter `<p>` is already a third of the paragraphs
+  and would keep "Subscribe…" in the file under `mode: "selection"`, which is
+  what the reading mode passes — the default conversion profile drops `<aside>`
+  for its own reasons and hid this. Link density alone is not enough either — a
+  documentation TOC and a list of sources have the same density, and density
+  alone would cut the wanted half. The suite asserts the furniture is gone from
+  the Markdown after `highlightsToMd`, not merely from the selector list.
 - **Visibility is an injected predicate.** Defaults to "everything is visible".
   Under linkedom and happy-dom a `display: none` node still contributes text, so
   a default that tried to read the cascade here would claim a certainty the

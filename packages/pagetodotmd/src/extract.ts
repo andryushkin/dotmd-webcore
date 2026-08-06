@@ -312,10 +312,12 @@ function preferSpecific(scored: Scored[]): Scored {
 /**
  * Nearest preceding h1–h2 when the root has no heading of its own.
  *
- * Only a heading element — never a whole `<header>` (logo, breadcrumbs, menu).
- * Same sectioning parent, nothing but non-article material between them, and no
- * other `<article>` on the path. The site's name lives in the page header; the
- * article's title is the one immediately above the body.
+ * Only a heading element, never a whole chrome region. Same sectioning parent,
+ * no other `<article>` between them. The article's title is the one immediately
+ * above the body *inside the same section* (`<main><h1>…</h1><article>`); the
+ * site's name lives in the page banner and must not be lifted — that is the
+ * ordinary blog `<body><header><h1>Site</h1></header><article>` shape, which
+ * has no `<main>` and would otherwise open the document on the site name.
  */
 function liftHeading(
   root: Element,
@@ -354,6 +356,37 @@ function liftHeading(
   return null;
 }
 
+/**
+ * The page-wide banner — site name, logo, top nav — not the article's title.
+ *
+ * `role="banner"` says so explicitly. A `<header>` that is not nested inside
+ * sectioning content or `<main>` is the same thing: HTML puts the site header
+ * as a child of `body` (or of a wrapper under body), while an article title
+ * header sits inside `<main>` / `<article>` / `<section>`. Without this, the
+ * lift walk reaches body as the sectioning parent and pulls "My Cool Website"
+ * in as the document title.
+ */
+function isPageBanner(el: Element): boolean {
+  const role = (el.getAttribute('role') ?? '').toLowerCase();
+  if (role === 'banner') return true;
+  if (el.tagName.toLowerCase() !== 'header') return false;
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const t = p.tagName.toLowerCase();
+    if (t === 'article' || t === 'aside' || t === 'nav' || t === 'section' || t === 'main') {
+      return false;
+    }
+    if (t === 'body' || t === 'html') return true;
+  }
+  return true;
+}
+
+function isInsidePageBanner(el: Element, stop: Element): boolean {
+  for (let p: Element | null = el; p && p !== stop; p = p.parentElement) {
+    if (isPageBanner(p)) return true;
+  }
+  return false;
+}
+
 function hasOwnHeading(root: Element, isVisible: (el: Element) => boolean): boolean {
   for (const h of root.querySelectorAll('h1, h2')) {
     if (!root.contains(h)) continue;
@@ -377,23 +410,17 @@ function hasHeadingLevel(
 }
 
 function lastHeadingIn(root: Element, isVisible: (el: Element) => boolean): Element | null {
+  // Never lift anything out of the page banner — that is the site name.
+  if (isPageBanner(root)) return null;
   const tag = root.tagName.toLowerCase();
   if ((tag === 'h1' || tag === 'h2') && isVisible(root)) return root;
-  // Never lift out of a <header> wholesale — walk for a bare heading only.
-  if (tag === 'header') {
-    // A bare h1/h2 *inside* header that is the only meaningful content is still
-    // wrong to lift as the header element; look for the heading itself.
-    const headings = root.querySelectorAll('h1, h2');
-    for (let i = headings.length - 1; i >= 0; i--) {
-      const h = headings[i]!;
-      if (isVisible(h)) return h;
-    }
-    return null;
-  }
   const headings = root.querySelectorAll('h1, h2');
   for (let i = headings.length - 1; i >= 0; i--) {
     const h = headings[i]!;
-    if (isVisible(h)) return h;
+    if (!isVisible(h)) continue;
+    // A heading nested under a banner inside this wrapper is the site name.
+    if (isInsidePageBanner(h, root)) continue;
+    return h;
   }
   return null;
 }
@@ -406,20 +433,43 @@ function sectioningParent(el: Element): Element | null {
 }
 
 /**
+ * Share of the root's *visible text* at which a furniture-tagged element is
+ * treated as body rather than chrome.
+ *
+ * A quarter of the words: enough that a mis-tagged content column stays, while
+ * a strip beside a long body does not. Measured in characters, not paragraphs
+ * — on a three-paragraph post one newsletter `<p>` is already a third of the
+ * paragraph count and would survive a pure count ratio, which is how
+ * "Subscribe…" used to reach the Markdown under `mode: "selection"`.
+ */
+const FURNITURE_BODY_SHARE = 0.25;
+
+/**
+ * Absolute floor under which the share test does not protect an element.
+ *
+ * "Subscribe to our promo newsletter now" is a large share of a 200-character
+ * root and must still be excluded. A real body column mis-classed as `aside`
+ * clears this on its own prose. TOC is handled by {@link isTableOfContents}
+ * and never reaches this test as something to drop.
+ */
+const FURNITURE_BODY_MIN_CHARS = 120;
+
+/**
  * Furniture inside a wide root, as selectors `CaptureOptions.exclude` can drop
  * from the clone.
  *
  * Conjunction, not link density alone: a documentation table of contents and a
  * list of sources have the same density, and density alone would cut the wanted
  * half. An element is furniture when a semantic tag or a furniture class marks
- * it *and* it sits outside the accepted body (little of the root's paragraph
- * text) *and* it is not a same-document table of contents.
+ * it *and* it sits outside the accepted body (little of the root's visible
+ * text, with an absolute floor so short posts cannot protect chrome by ratio)
+ * *and* it is not a same-document table of contents.
  */
 function furnitureSelectors(
   root: Element,
   isVisible: (el: Element) => boolean,
 ): string[] {
-  const rootParagraphs = countParagraphs(root, isVisible);
+  const rootText = visibleTextLength(root, isVisible);
   const selectors: string[] = [];
   const seen = new Set<string>();
 
@@ -428,12 +478,8 @@ function furnitureSelectors(
     if (!isVisible(el)) continue;
     if (!isFurnitureSignal(el)) continue;
     if (isTableOfContents(el)) continue;
-    // Holds a real share of the article's paragraphs — it is the body, not chrome.
-    const share =
-      rootParagraphs === 0
-        ? 0
-        : countParagraphs(el, isVisible) / rootParagraphs;
-    if (share >= 0.25) continue;
+    // Holds a real share of the article's prose — it is the body, not chrome.
+    if (holdsArticleBody(el, rootText, isVisible)) continue;
     // Nested furniture under already-listed furniture is redundant.
     if (selectors.some((s) => {
       try {
@@ -451,6 +497,21 @@ function furnitureSelectors(
   }
 
   return selectors;
+}
+
+/**
+ * Whether a furniture-tagged element actually carries article body prose.
+ * See {@link FURNITURE_BODY_SHARE} and {@link FURNITURE_BODY_MIN_CHARS}.
+ */
+function holdsArticleBody(
+  el: Element,
+  rootText: number,
+  isVisible: (el: Element) => boolean,
+): boolean {
+  const elText = visibleTextLength(el, isVisible);
+  if (elText < FURNITURE_BODY_MIN_CHARS) return false;
+  if (rootText === 0) return false;
+  return elText / rootText >= FURNITURE_BODY_SHARE;
 }
 
 function isFurnitureSignal(el: Element): boolean {

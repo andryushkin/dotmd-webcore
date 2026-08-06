@@ -17,6 +17,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 import { findArticle, DEFAULT_MIN_TEXT_LENGTH } from '../src/extract.js';
+import { highlightsToMd } from '../src/capture.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'extract-fixtures');
 
@@ -132,6 +133,35 @@ const CORPUS: Case[] = [
       expect(result.reason === 'too-thin' || result.reason === 'iframe-or-canvas' || result.reason === 'no-candidates').toBe(true);
     },
   },
+  {
+    // Ordinary blog: no <main>, site name in body-level <header>. Must not lift.
+    file: 'blog-site-header.html',
+    must: [
+      'laboratory samples collected over eighteen months',
+      'ordinary blog has no main element',
+    ],
+    mustNot: ['My Cool Website'],
+    check: (_doc, result) => {
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.nodes.length).toBe(1);
+      expect(result.nodes[0]!.tagName.toLowerCase()).toBe('article');
+      expect(textOf(result.nodes)).not.toContain('My Cool Website');
+    },
+  },
+  {
+    // Short post: one newsletter <p> is 1/3 of paragraph count — text share must still exclude it.
+    file: 'short-article-newsletter.html',
+    must: ['Real article title', 'first paragraph of a short post'],
+    mustNot: [],
+    check: (_doc, result) => {
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(
+        result.exclude.some((s) => /newsletter|aside/i.test(s)),
+      ).toBe(true);
+    },
+  },
 ];
 
 describe('findArticle corpus', () => {
@@ -223,5 +253,66 @@ describe('findArticle corpus', () => {
     } else {
       expect(result.metrics.textLength).toBeLessThan(DEFAULT_MIN_TEXT_LENGTH);
     }
+  });
+});
+
+/**
+ * The reading mode passes `mode: "selection"`, under which the converter keeps
+ * `<aside>` that the default profile would drop. Asserting only on the exclude
+ * *list* hid a threshold that left "Subscribe…" in the file. The product path
+ * is findArticle → highlightsToMd with that profile; the assertion is the Markdown.
+ */
+describe('findArticle → highlightsToMd (selection profile)', () => {
+  const selectionConversion = {
+    mode: 'selection' as const,
+    topHeadingLevel: 1,
+  };
+
+  test('newsletter furniture is gone from the Markdown on a short article', () => {
+    const doc = load('short-article-newsletter.html');
+    const found = findArticle(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    expect(found.exclude.length).toBeGreaterThan(0);
+
+    const { md } = highlightsToMd(found.nodes, doc, {
+      exclude: found.exclude,
+      conversion: selectionConversion,
+    });
+    expect(md).toContain('Real article title');
+    expect(md).toContain('first paragraph of a short post');
+    expect(md).not.toContain('Subscribe to our promo newsletter now');
+  });
+
+  test('site banner is not the document title in the Markdown', () => {
+    const doc = load('blog-site-header.html');
+    const found = findArticle(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+
+    const { md } = highlightsToMd(found.nodes, doc, {
+      exclude: found.exclude,
+      conversion: selectionConversion,
+    });
+    expect(md).toContain('laboratory samples collected over eighteen months');
+    expect(md).not.toContain('My Cool Website');
+    // No leading site-name heading.
+    expect(md.trimStart().startsWith('# My Cool Website')).toBe(false);
+  });
+
+  test('main > h1 above article still reaches the Markdown as the title', () => {
+    const doc = load('heading-above-article.html');
+    const found = findArticle(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    expect(found.nodes.length).toBe(2);
+
+    const { md } = highlightsToMd(found.nodes, doc, {
+      exclude: found.exclude,
+      conversion: selectionConversion,
+    });
+    expect(md).toContain('How sectioning splits a title from its body');
+    expect(md).toContain('paragraphs live inside the article element');
+    expect(md).not.toContain('SiteName Media Group');
   });
 });
