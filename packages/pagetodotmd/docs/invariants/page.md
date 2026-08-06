@@ -35,6 +35,31 @@ of a pair whose other end is in that sheet.
   becomes of a table GFM cannot express: each is argued from what a person does
   with the file afterwards. `baseUrl` is the one exception and is filled in from
   the document, which is this package's own input.
+- **`prepareClone` is the optional way into a finished clone**, and it is off by
+  default. Both capture paths call it once per fragment after own-UI, hard breaks
+  and namespace canonicalization, and before `serialize` / the heading probe /
+  conversion — so `withHtml` shows what the converter was given. A throw is
+  swallowed: a consumer's hook is not a reason to fail a capture or to leave the
+  page dirty. With no hook, every path is byte-for-byte what it was.
+- **`openDetails` and `materializeCurrentSrc` are exports this package never
+  calls.** They are a reading-mode product's policy, not the clipper's. The
+  clipper's written answer is the opposite: a collapsed `<details>` contributes
+  its `<summary>` alone (`foldCollapsedDetails` in the converter), and an image's
+  address is whatever the markup lists. Mechanism lives here; which product flips
+  the switch is that product's. Both edit the clone only — never the live page —
+  so a site's `toggle` handlers and `<details name>` groups stay out of the
+  capture. Live `currentSrc` is a layout answer a detached clone does not have,
+  so the consumer builds a map with `collectCurrentSrc` on the live root
+  **before** the capture (read-only — no attribute is written, or the style
+  snapshot that follows would pay a recalculation per element) and hands it to
+  `materializeCurrentSrc`. The key is `imageAddressSignature` and only that —
+  address attributes the clone still carries after `dropOwnUI` / `exclude`, not
+  a document-order zip (which mis-assigns every image after the first excluded
+  one) and not a mark on the live node. Under linkedom `img.currentSrc` is
+  `undefined`, so Chrome is the last word on the values. The attributes stripped
+  are a **pair** with `extractImageUrl` in the converter (`IMAGE_ADDRESS_ATTRS`):
+  every source of an address there is a name that must come off the clone here,
+  or writing `src` alone changes nothing.
 
 ## The namespace
 

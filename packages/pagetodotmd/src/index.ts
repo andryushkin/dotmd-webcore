@@ -64,3 +64,14 @@ export {
 } from './shadow-selection.js';
 
 export { joinFragments } from './join-fragments.js';
+
+// Optional clone edits and the hook context they are typically called from.
+// Mechanism only — this package never applies them; the consumer's policy does.
+export {
+  IMAGE_ADDRESS_ATTRS,
+  collectCurrentSrc,
+  imageAddressSignature,
+  materializeCurrentSrc,
+  openDetails,
+} from './clone-edits.js';
+export type { PrepareCloneContext } from './capture.js';
