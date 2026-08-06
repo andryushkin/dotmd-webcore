@@ -24,9 +24,14 @@ export {
   createMarkdownRenderer,
   type MarkdownContribution,
   type MarkdownRenderer,
+  type RenderedHeading,
   type RenderResult,
   type RendererOptions,
 } from './renderer.js';
+
+// Pure: heading text → base id. The uniquifying suffix is not part of this —
+// that needs the document, and lives on `RenderResult.headings`.
+export { headingSlug } from './heading-slug.js';
 
 export {
   hydrateMath,

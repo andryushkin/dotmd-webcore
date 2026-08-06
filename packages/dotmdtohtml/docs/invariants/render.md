@@ -244,3 +244,42 @@ product's, and none of it is here.
   and no element — and because it must still parse *this* dialect: without the
   highlight extension the text came out with four `=` characters in it, which is
   the file's syntax showing through the one output whose job is to have none.
+
+## Heading ids
+
+- **`headingIds` is off by default, and the default path must not move a byte.**
+  The clipper's preview panel renders through this package; ids on its headings
+  would change the panel's DOM and its `:target` behaviour by a decision nobody
+  made there. The option is registered as a heading renderer override only when
+  on — when off, `marked`'s own heading renderer is left alone, which is what
+  keeps the markup identical rather than "equivalent".
+- **The renderer writes the ids, and hands back the list.** A consumer scraping
+  `h1`…`h6` out of the finished markup is guessing at a contract nobody stated,
+  and a duplicate-heading rule invented on that side drifts away from this one
+  silently. `RenderResult.headings` is level, plain text and the `id` each tag
+  received, in document order; the list and the markup are built from the same
+  walk of the same token tree so they cannot disagree here. A list naming an id
+  the markup does not contain is worse than no list at all.
+- **The counter is per render, never per renderer or per module.** The same
+  defect `RenderResult.math` was written to close: a module-wide map let a second
+  render hydrate its formulas into the first document's placeholders. A heading
+  counter with the same scope mints `title-2` on a second render of the same
+  note, and every link in the table of contents points nowhere.
+- **`headingSlug(text)` is pure and exported; uniqueness is not its job.** A
+  second package reads a live page's internal links and hands back heading
+  *text* — no slug, because it must not depend on this one. The consumer joins
+  the two by running that text through this function. Same input, same output,
+  no renderer, no state. The suffix that parts two headings titled "Intro" needs
+  the document; `RenderResult.headings` is where a consumer learns the final id.
+- **Empty, punctuation-only and emoji-only text slug to `""`; the renderer then
+  uses the base `heading`.** Non-Latin letters stay: Cyrillic and CJK are
+  letters, and stripping them empty is the defect a Russian document hits first.
+- **The plain text of a heading is what a reader reads without markup.**
+  Emphasis, links and code spans leave their text; a formula contributes its
+  LaTeX without the dollars — never the `data-katex` placeholder that carries it
+  through the sanitizer. That placeholder is empty, and letting it into the id
+  or the list is a defect a reader sees.
+- **Ids are written before `sanitize`, and must survive it.** Default DOMPurify
+  keeps `id`. A consumer that configures the sanitizer to strip it gets a list
+  naming anchors the markup no longer holds; allow `id` through, or leave the
+  option off.

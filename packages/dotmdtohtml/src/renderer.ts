@@ -14,6 +14,7 @@
  * the newer text with the older document.
  */
 import { contentGapExtension, markContentGaps, type BlockToken } from './content-gaps.js';
+import { collectHeadings, type RenderedHeading } from './heading-ids.js';
 import { markedHighlight } from './highlight.js';
 import {
   beginMathRun,
@@ -26,6 +27,8 @@ import {
 import { renderMath, type KatexEngine, type MarkedConstructor, type Sanitize } from './engines.js';
 import { MARKED_PROFILE } from './profile.js';
 import { DOTMD_CLASS, DOTMD_SCHEMA_ATTR, DOTMD_SCHEMA_VERSION } from './schema.js';
+
+export type { RenderedHeading } from './heading-ids.js';
 
 /**
  * A block a product puts into the note and wants shown as something else.
@@ -74,6 +77,15 @@ export interface RenderResult {
    * first one's placeholders.
    */
   readonly math: MathPlaceholders;
+  /**
+   * This render's headings, when `headingIds` is on — level, plain text, and the
+   * `id` each tag received, in document order. Empty when the option is off, so a
+   * caller that never asked for anchors is not handed a list that pretends to
+   * match markup with none. Owned by this result the same way `math` is: a second
+   * render of the same note mints the same ids again rather than continuing a
+   * counter the first render left behind.
+   */
+  readonly headings: readonly RenderedHeading[];
 }
 
 export interface RendererOptions {
@@ -85,6 +97,18 @@ export interface RendererOptions {
   katex: KatexEngine;
   /** Product blocks, applied in the order given. */
   contributions?: readonly MarkdownContribution[];
+  /**
+   * When on, every heading `h1`…`h6` is written with an `id`, and
+   * `RenderResult.headings` lists them. Off by default: the clipper's preview
+   * panel renders through this package, and ids on its headings would change the
+   * panel's DOM and its `:target` behaviour by a decision nobody made there.
+   *
+   * The ids are put on by the heading renderer, *before* `options.sanitize` runs.
+   * Default DOMPurify keeps `id`; a consumer that configures the sanitizer to
+   * strip it will get a list naming anchors the markup no longer holds — which is
+   * worse than no list. Allow `id` through, or leave the option off.
+   */
+  headingIds?: boolean;
 }
 
 export interface MarkdownRenderer {
@@ -139,6 +163,7 @@ function contribute(md: string, contribution: MarkdownContribution): string {
  */
 export function createMarkdownRenderer(options: RendererOptions): MarkdownRenderer {
   const contributions = options.contributions ?? [];
+  const headingIds = options.headingIds === true;
   // The render that is open. `marked` calls a tokenizer during `lexer()` and a
   // renderer during `parser()`, both inside the synchronous call below, so this
   // is never non-null across a suspension point — there is none.
@@ -148,6 +173,46 @@ export function createMarkdownRenderer(options: RendererOptions): MarkdownRender
     return open;
   };
 
+  // Headings of the render that is open, consumed in document order by the
+  // heading renderer. Collected after lexing so the plain text can see the math
+  // placeholders that render recorded; reset every render so a second pass of
+  // the same note does not continue the first pass's counters.
+  let openHeadings: readonly RenderedHeading[] = [];
+  let headingAt = 0;
+
+  const rendererOverrides: Record<string, unknown> = {
+    /**
+     * A task item, said out loud.
+     *
+     * `marked` writes the checkbox and leaves the `<li>` bare, so the only way
+     * to find one is to ask whether it has a checkbox in it — and that is what
+     * a product's stylesheet was doing, with `:has()`, where nothing said the
+     * renderer depended on it. A structural query is not a name: it cannot be
+     * versioned, it cannot be documented in a schema, and a theme written
+     * against it is a theme that has guessed. The checkbox stays where it is;
+     * this only lets a stylesheet say which item it belongs to.
+     */
+    listitem(text: string, task: boolean, checked: boolean): string {
+      if (!task) return `<li>${text}</li>\n`;
+      const done = checked ? ` ${DOTMD_CLASS.taskDone}` : '';
+      return `<li class="${DOTMD_CLASS.task}${done}">${text}</li>\n`;
+    },
+  };
+
+  // Registered only when the option is on, so the default path never overrides
+  // `marked`'s own heading renderer — byte-for-byte the markup it produced
+  // before this option existed.
+  if (headingIds) {
+    rendererOverrides.heading = (text: string, level: number): string => {
+      const heading = openHeadings[headingAt++];
+      // collectHeadings walks the same tree `parser` does; a missing entry would
+      // mean those two disagreed about what a heading is, and an id-less tag next
+      // to a list that claims one is worse than no list.
+      if (!heading) return `<h${level}>${text}</h${level}>\n`;
+      return `<h${level} id="${heading.id}">${text}</h${level}>\n`;
+    };
+  }
+
   const parser = new options.Marked(MARKED_PROFILE);
   parser.use({
     extensions: [
@@ -156,24 +221,7 @@ export function createMarkdownRenderer(options: RendererOptions): MarkdownRender
       mathExtension(current),
       contentGapExtension,
     ],
-    renderer: {
-      /**
-       * A task item, said out loud.
-       *
-       * `marked` writes the checkbox and leaves the `<li>` bare, so the only way
-       * to find one is to ask whether it has a checkbox in it — and that is what
-       * a product's stylesheet was doing, with `:has()`, where nothing said the
-       * renderer depended on it. A structural query is not a name: it cannot be
-       * versioned, it cannot be documented in a schema, and a theme written
-       * against it is a theme that has guessed. The checkbox stays where it is;
-       * this only lets a stylesheet say which item it belongs to.
-       */
-      listitem(text: string, task: boolean, checked: boolean): string {
-        if (!task) return `<li>${text}</li>\n`;
-        const done = checked ? ` ${DOTMD_CLASS.taskDone}` : '';
-        return `<li class="${DOTMD_CLASS.task}${done}">${text}</li>\n`;
-      },
-    },
+    renderer: rendererOverrides,
   });
 
   const draw = (latex: string, display: boolean): string =>
@@ -185,15 +233,29 @@ export function createMarkdownRenderer(options: RendererOptions): MarkdownRender
     const run = beginMathRun();
     const previous = open;
     open = run;
+    openHeadings = [];
+    headingAt = 0;
     try {
       // Lexed and parsed in two steps rather than `parse()`, because the gaps are
       // put in between them: a token stream is where a blank line can be told
       // from a blank line inside a code fence.
       const tokens = parser.lexer(text) as BlockToken[];
       markContentGaps(tokens);
-      return { html: options.sanitize(parser.parser(tokens)), math: run.placeholders };
+      // After lex (math tokens already hold their ids) and before parse (which
+      // is when the heading renderer runs). The list and the markup are built
+      // from the same walk of the same tree, so an id the list names is an id
+      // the tag carries — provided the sanitizer leaves `id` alone.
+      const headings = headingIds ? collectHeadings(tokens, run) : [];
+      openHeadings = headings;
+      return {
+        html: options.sanitize(parser.parser(tokens)),
+        math: run.placeholders,
+        headings,
+      };
     } finally {
       open = previous;
+      openHeadings = [];
+      headingAt = 0;
     }
   }
 
