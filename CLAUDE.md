@@ -96,7 +96,12 @@ exactly why it can drift silently.
 
 - **A threshold or a reader in `htmltodotmd` ⇄ the clipper's fidelity oracle.**
   It imports them rather than restating them. Renaming one is a change on both
-  sides.
+  sides. A *table* is the same pair and a worse one when it is many-to-one:
+  `SUPERSCRIPT` and `SUBSCRIPT` raise both the hyphen and U+2212 to one
+  character, and the oracle's own reverse copy — every entry these have — read
+  that back as the hyphen alone and reported the minus sign as a defect. It
+  derives the fold from these now. `MAX_FLATTENED_SPAN` was the same drift with a
+  number: 32 here against a private 24 there.
 - **What `pagetodotmd` writes ⇄ what `htmltodotmd` reads.** `paintedBackground()`
   and `isMonospaced()` are one spelling for both sides; the relative size written
   on every `role="heading"` is read there as an answer. Both sheets say which

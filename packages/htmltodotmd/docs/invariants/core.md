@@ -81,6 +81,12 @@ container leaves behind; the half that measures is the clipper's
   from 81 failures to 93 — because plain `xABC` costs nothing visible and loses the level, and a
   reader of the file cannot see that a level is missing. A run of blanks and a footnote marker (a
   `<sup>` holding a link, which is every Wikipedia citation) keep no marker.
+  The two tables are **many-to-one and exported for that reason**: the ASCII hyphen and U+2212 both
+  raise to `⁻`, so nothing outside can read a raised run back to the character the page held. The
+  fidelity oracle used to keep a reverse table of its own — every entry these have, and still
+  disagreeing, because a reverse map cannot express a fold — and reported `x<sup>−1</sup>` as a
+  defect this side had not committed. It now derives the fold from these and applies it to both
+  sides of its comparison.
 
 ## Escaping
 
@@ -539,6 +545,11 @@ threshold sits where no layout lands by accident.
   Markdown, so escaping shows backslashes *and* `**bold**` shows asterisks. Emphasis, code and links
   emit tags; an image emits alt text, since allowing `src`/`alt` past the preview's allow-list would
   widen it for a case that already rendered nothing. A link's scheme is checked.
+- `MAX_FLATTENED_SPAN` is how many columns one `colspan` may claim, and it is exported because the
+  fidelity oracle builds the same grid. It kept a cap of its own at 24 against this one's 32, so a
+  `colspan="30"` was written here as thirty columns and expected there as twenty-four. The survey
+  never saw it — the generator writes no span that wide — which is what a second spelling costs: it
+  waits for a real page instead of failing on a seed.
 
 ## Package
 

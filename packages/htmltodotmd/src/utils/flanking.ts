@@ -1,7 +1,6 @@
 import {
   addedMarks,
   displaysAsBlock,
-  isHighlighted,
   laysARow,
   suppressedMarks,
   type StyleMarks,

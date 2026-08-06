@@ -12,8 +12,11 @@ import {
   mayOpenLink,
 } from '../core/escape.js';
 
-// Wide enough for any table a person laid out by hand.
-const MAX_FLATTENED_SPAN = 32;
+// Wide enough for any table a person laid out by hand. Exported for the fidelity
+// oracle, which builds the grid a reader saw and has to allocate a spanned cell
+// exactly as many slots as this side does: its own smaller cap made the oracle
+// expect one shape and this side write another.
+export const MAX_FLATTENED_SPAN = 32;
 
 const TEXT_NODE = 3;
 const ELEMENT_NODE = 1;

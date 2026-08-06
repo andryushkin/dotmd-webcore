@@ -12,7 +12,6 @@ import { isHtmlContext, lookAhead } from '../core/parser.js';
 import {
   addedMarks,
   elementStyle,
-  isHighlighted,
   marksPerChild,
   suppressedMarks,
   type StyleMarks,
@@ -301,7 +300,13 @@ const CODE_TAGS = new Set(['code', 'kbd', 'samp']);
 // What Unicode has for a raised or a lowered run. Digits and the operators are
 // complete in both; letters are a scattering, and the gaps are why `shifted()`
 // refuses a partial mapping rather than filling in what it can.
-const SUPERSCRIPT = new Map(
+//
+// Exported because the fidelity oracle has to read a raised run back, and a
+// second spelling of these tables is one that goes on measuring the old ones.
+// Two keys share a value in each — the ASCII hyphen and U+2212 both raise to the
+// same character — so the reverse is a fold rather than a map, and the oracle
+// derives it here instead of restating it.
+export const SUPERSCRIPT = new Map(
   Object.entries({
     '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸',
     '9': '⁹', '+': '⁺', '-': '⁻', '−': '⁻', '=': '⁼', '(': '⁽', ')': '⁾', 'n': 'ⁿ', 'i': 'ⁱ',
@@ -311,7 +316,7 @@ const SUPERSCRIPT = new Map(
   }),
 );
 
-const SUBSCRIPT = new Map(
+export const SUBSCRIPT = new Map(
   Object.entries({
     '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈',
     '9': '₉', '+': '₊', '-': '₋', '−': '₋', '=': '₌', '(': '₍', ')': '₎', 'a': 'ₐ', 'e': 'ₑ',
