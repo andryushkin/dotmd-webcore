@@ -109,6 +109,52 @@ export interface CaptureOptions {
    * second capture is shifted by what the first was shifted by.
    */
   headingBase?: number;
+  /**
+   * Optional edit of each cloned fragment, after the capture has finished with
+   * it and before anything reads it for conversion.
+   *
+   * Off by default: with no hook, every path is byte-for-byte what it was. The
+   * clipper never flips this — a collapsed `<details>` contributing only its
+   * summary, an image address taken from the markup — and a reading-mode
+   * product that wants the opposite runs `openDetails` / `materializeCurrentSrc`
+   * (or anything else) from here. Both capture paths call it, or neither would:
+   * a hook that fires for a selection and not for picked-out elements is a
+   * defect a consumer finds on the second page.
+   *
+   * Ordering is deliberate. The hook runs after `cloneRangeWithBr` has dropped
+   * own-UI, marked hard breaks and canonicalized the namespace, and before
+   * `serialize` / `topHeadingLevelAcross` / `toMarkdown`. `withHtml` serializes
+   * *after* the hook so the markup it returns is what the converter was given —
+   * which is the point of `serialize`'s own comment. Running the hook earlier
+   * would let it see own-UI the capture is about to drop; running it after
+   * serialize would make `html` a report about a different fragment than `md`.
+   *
+   * A throw is swallowed, the way `dropOwnUI` swallows a bad selector: a
+   * consumer's hook is policy, not plumbing, and a fault in it is one fragment
+   * left unprepared, never a failed capture and never a reason to skip the
+   * nested `finally` blocks that put the page back. Letting the throw out would
+   * still restore the page (the `finally` runs) but would fail the capture for
+   * a mistake that is not this package's — the same bargain `dropOwnUI` already
+   * refused for a typo in `exclude`.
+   */
+  prepareClone?: (fragment: DocumentFragment, context: PrepareCloneContext) => void;
+}
+
+/**
+ * What `prepareClone` may need from the capture and cannot get from the
+ * fragment alone.
+ *
+ * `doc` is how a hook creates nodes and how it reads `baseURI` for resolving
+ * addresses. `namespace` is the session's attribute dialect, already
+ * canonicalized on the fragment for the two names the converter reads, but
+ * still the names a hook would look for on own-UI marks or hard-break marks
+ * this capture wrote. Nothing else: a live `Range` or the full options object
+ * would be "just in case", and the restore contract means a hook must not
+ * reach the live page through either.
+ */
+export interface PrepareCloneContext {
+  doc: Document;
+  namespace: CaptureNamespace;
 }
 
 /** What one capture produced: the file, and — on request — its input. */
@@ -263,6 +309,29 @@ export function cloneRangeWithBr(range: Range, options: CaptureOptions = {}): Do
 }
 
 /**
+ * Runs the consumer's `prepareClone` on one finished clone, or does nothing.
+ *
+ * Own call site for both capture paths so a future path cannot forget it. The
+ * throw is caught here rather than at each call: one policy for every fragment.
+ * See `CaptureOptions.prepareClone` for why the hook is where it is and why a
+ * throw must not fail the capture.
+ */
+function runPrepareClone(
+  fragment: DocumentFragment,
+  doc: Document,
+  options: CaptureOptions,
+): void {
+  const prepare = options.prepareClone;
+  if (!prepare) return;
+  const namespace = options.namespace ?? DEFAULT_NAMESPACE;
+  try {
+    prepare(fragment, { doc, namespace });
+  } catch {
+    // A consumer's hook is not a reason to fail the capture — see prepareClone.
+  }
+}
+
+/**
  * Records what the page's stylesheets say, for the length of one capture.
  *
  * Before anything else: `getComputedStyle` is answered from a cache Chrome throws
@@ -346,6 +415,9 @@ export function selectionToCapture(
       // about every fragment and `toMarkdown` consumes the one it is given.
       const clones = ranges.map((range) => {
         const fragment = cloneRangeWithBr(expandRangeToWords(range), options);
+        // After the clone is finished (own-UI, hard breaks, namespace) and before
+        // serialize / heading probe / conversion — see CaptureOptions.prepareClone.
+        runPrepareClone(fragment, doc, options);
         if (options.withHtml) markup.push(serialize(fragment, doc));
         return fragment;
       });
@@ -396,6 +468,8 @@ export function highlightsToMd(
         const range = doc.createRange();
         range.selectNodeContents(el);
         const fragment = cloneRangeWithBr(range, options);
+        // Same seam as selectionToCapture: both paths, or neither.
+        runPrepareClone(fragment, doc, options);
         if (options.withHtml) markup.push(serialize(fragment, doc));
         return fragment;
       });
