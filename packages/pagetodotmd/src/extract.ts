@@ -36,7 +36,8 @@ export interface ArticleFound {
   ok: true;
   /**
    * Elements to capture, in document order. Usually one root; sometimes a
-   * preceding heading and then the root (see heading lift below).
+   * preceding title (and its standfirst deck) and then the root — see heading
+   * lift below.
    */
   nodes: Element[];
   /**
@@ -187,9 +188,12 @@ export function findArticle(
     return { ok: false, reason: 'too-thin', metrics };
   }
 
-  const heading = liftHeading(winner.el, isVisible);
-  const nodes = heading ? [heading, winner.el] : [winner.el];
-  if (heading && heading.tagName.toLowerCase() === 'h1') {
+  const lifted = liftHeadings(winner.el, isVisible);
+  const nodes = lifted.length > 0 ? [...lifted, winner.el] : [winner.el];
+  // A lifted h1 is the document title even though it sat outside the scored
+  // root — hasH1 must say so, or a consumer that asks "whole document?" from
+  // the metrics alone treats a titled capture as a fragment.
+  if (lifted.some((h) => h.tagName.toLowerCase() === 'h1')) {
     metrics.hasH1 = true;
   }
 
@@ -310,66 +314,115 @@ function preferSpecific(scored: Scored[]): Scored {
 }
 
 /**
- * Nearest preceding h1–h2 worth lifting as the article's title.
+ * Preceding h1–h2 nodes to capture ahead of the article root.
  *
- * Only a heading element, never a whole chrome region. Same sectioning parent,
- * no other `<article>` between them. The site's name lives in the page banner
- * and must not be lifted — that is the ordinary blog
- * `<body><header><h1>Site</h1></header><article>` shape, which has no `<main>`
- * and would otherwise open the document on the site name.
+ * Only heading elements, never a whole chrome region. Same sectioning parent,
+ * no other `<article>` between them, never out of the page banner — that is the
+ * ordinary blog `<body><header><h1>Site</h1></header><article>` shape, which
+ * has no `<main>` and would otherwise open the document on the site name.
  *
- * Level, not presence: an article with section `<h2>`s is the ordinary case,
- * and refusing the lift whenever *any* h1–h2 sits inside left the real title
- * outside the capture and let `topHeadingLevel: 1` promote a section heading
- * into the document title. The outside heading is lifted only when it strictly
- * outranks every heading the root already holds (lower number wins: h1 beats
- * h2). Equal rank means the root already has a title of that level — so
- * `<main><h1>Site or category</h1><article><h1>The real title</h1>…` does not
- * lift, and neither does outside h2 + inside h2. No heading inside → always
- * lift. An inside h1 short-circuits the walk: nothing outside can outrank it.
+ * Level, not distance: "what is this document called" is answered by rank
+ * (h1 beats h2), not by which heading sits nearest the body. The standard
+ * news shape is `<main><h1>Title</h1><h2>Deck</h2><article>…<h2>Section`, and
+ * stopping at the first preceding heading left the walk on the deck; the level
+ * rule then refused it (equal to the section h2 inside) and never considered
+ * the h1 two steps away — so the capture opened on body prose with no title at
+ * all. Collect every qualifying preceding heading, keep those that strictly
+ * outrank the root's own best (lower number wins; equal rank means the root
+ * already has a title of that level; an inside h1 short-circuits), and lift the
+ * best rank. Among equal rank, the nearest to the body wins.
+ *
+ * Deck: when the nearest preceding heading is not the title, is strictly lower
+ * rank than it, and sits under the same rules (not banner, not furniture), it
+ * comes along as a second lifted node — a standfirst is part of how the page
+ * titles itself, and the capture already takes a list. Only that one nearest
+ * subordinate: sweeping every heading between title and body would also take a
+ * bare section-nav h2 that is not wrapped in `<nav>`. Headings under furniture
+ * (`nav` / `aside` / …) are never candidates, so a real contents nav is not
+ * lifted. What the reader still loses: a deck written as a `<p class="dek">`
+ * rather than an h2, and a second standfirst when two subordinate headings sit
+ * between title and body (only the nearest rides along).
  */
-function liftHeading(
+function liftHeadings(
   root: Element,
   isVisible: (el: Element) => boolean,
-): Element | null {
+): Element[] {
   // Best (lowest) h1–h2 level already under the root. null = none.
   const ownBest = bestOwnHeadingLevel(root, isVisible);
   // Nothing outside can outrank an h1 the body already carries.
-  if (ownBest === 1) return null;
+  if (ownBest === 1) return [];
 
+  const preceding = precedingHeadings(root, isVisible);
+  if (preceding.length === 0) return [];
+
+  // Title: best rank among those that outrank the body; nearest on a tie
+  // (later in `preceding` is nearer the body, so equal rank overwrites).
+  let title: Element | null = null;
+  let titleRank: 1 | 2 | null = null;
+  for (const h of preceding) {
+    if (!outranksOwn(h, ownBest)) continue;
+    const rank = headingRank(h);
+    if (rank === null) continue;
+    if (title === null || rank < titleRank! || rank === titleRank) {
+      title = h;
+      titleRank = rank;
+    }
+  }
+  if (!title || titleRank === null) return [];
+
+  const lifted: Element[] = [title];
+
+  // Standfirst immediately above the body, when the title sat further up.
+  const nearest = preceding[preceding.length - 1]!;
+  if (nearest !== title) {
+    const deckRank = headingRank(nearest);
+    if (deckRank !== null && deckRank > titleRank) {
+      lifted.push(nearest);
+    }
+  }
+
+  return lifted;
+}
+
+/**
+ * All h1–h2 that sit before `root` under the same sectioning parent, in
+ * document order. Stops looking past another `<article>`; skips the page
+ * banner and furniture wrappers.
+ */
+function precedingHeadings(
+  root: Element,
+  isVisible: (el: Element) => boolean,
+): Element[] {
   const parent = sectioningParent(root);
-  if (!parent) return null;
+  if (!parent) return [];
 
-  // Walk previous siblings and their descendants from the end, looking for the
-  // nearest heading that still sits under the same sectioning parent.
+  const found: Element[] = [];
+
+  // Previous siblings of the root, nearest first — unshift so the list ends in
+  // document order (farthest … nearest).
   let sib: Element | null = root.previousElementSibling;
   while (sib) {
-    if (sib.tagName.toLowerCase() === 'article') return null;
-    const heading = lastHeadingIn(sib, isVisible);
-    if (heading && outranksOwn(heading, ownBest)) return heading;
-    // A candidate that does not outrank is still "nearest"; looking further
-    // would skip past the title that sits immediately above the body.
-    if (heading) return null;
+    if (sib.tagName.toLowerCase() === 'article') break;
+    found.unshift(...headingsIn(sib, isVisible));
     sib = sib.previousElementSibling;
   }
 
-  // Parent may hold the heading as a direct structure above nested wrappers.
-  // Only accept a heading that is a previous sibling of some ancestor chain
-  // member still inside `parent`.
+  // Headings on previous siblings of ancestors still inside the sectioning parent
+  // (title wrapped in a header/div above a nested article path).
   let probe: Element | null = root.parentElement;
   while (probe && probe !== parent) {
     let prev: Element | null = probe.previousElementSibling;
+    const batch: Element[] = [];
     while (prev) {
-      if (prev.tagName.toLowerCase() === 'article') return null;
-      const heading = lastHeadingIn(prev, isVisible);
-      if (heading && outranksOwn(heading, ownBest)) return heading;
-      if (heading) return null;
+      if (prev.tagName.toLowerCase() === 'article') break;
+      batch.unshift(...headingsIn(prev, isVisible));
       prev = prev.previousElementSibling;
     }
+    found.unshift(...batch);
     probe = probe.parentElement;
   }
 
-  return null;
+  return found;
 }
 
 /** True when `heading` is a strictly higher rank than the root's best own level. */
@@ -452,20 +505,33 @@ function hasHeadingLevel(
   return false;
 }
 
-function lastHeadingIn(root: Element, isVisible: (el: Element) => boolean): Element | null {
-  // Never lift anything out of the page banner — that is the site name.
-  if (isPageBanner(root)) return null;
-  const tag = root.tagName.toLowerCase();
-  if ((tag === 'h1' || tag === 'h2') && isVisible(root)) return root;
-  const headings = root.querySelectorAll('h1, h2');
-  for (let i = headings.length - 1; i >= 0; i--) {
-    const h = headings[i]!;
+/**
+ * h1–h2 under a preceding sibling/wrapper, in document order.
+ * Banner and furniture scopes contribute nothing — those are site chrome.
+ */
+function headingsIn(scope: Element, isVisible: (el: Element) => boolean): Element[] {
+  if (isPageBanner(scope)) return [];
+  if (isFurnitureSignal(scope)) return [];
+  const tag = scope.tagName.toLowerCase();
+  if (tag === 'h1' || tag === 'h2') {
+    return isVisible(scope) ? [scope] : [];
+  }
+  const out: Element[] = [];
+  for (const h of scope.querySelectorAll('h1, h2')) {
     if (!isVisible(h)) continue;
     // A heading nested under a banner inside this wrapper is the site name.
-    if (isInsidePageBanner(h, root)) continue;
-    return h;
+    if (isInsidePageBanner(h, scope)) continue;
+    if (isUnderFurniture(h, scope)) continue;
+    out.push(h);
   }
-  return null;
+  return out;
+}
+
+function isUnderFurniture(el: Element, stop: Element): boolean {
+  for (let p: Element | null = el.parentElement; p && p !== stop; p = p.parentElement) {
+    if (isFurnitureSignal(p)) return true;
+  }
+  return false;
 }
 
 function sectioningParent(el: Element): Element | null {

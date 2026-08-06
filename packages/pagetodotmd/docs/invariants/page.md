@@ -328,25 +328,29 @@ want "the article on this page"; neither should re-score the DOM alone.
   title outside the body (`<main><h1>…</h1><article>…</article></main>`). The
   scorer honestly picks `<article>` where the paragraphs live; a capture of that
   root alone ships a document with no title and a length that still passed every
-  threshold. The heading is lifted under a narrow rule only: an `h1`–`h2`, only
-  the nearest preceding one under the same sectioning parent, with no other
-  `<article>` between them, and only when it **strictly outranks** every
-  heading the root already holds (level, not presence: an inside `h2` section
-  heading is ordinary structure and must not block an outside `h1`; equal rank
-  — outside `h1` + inside `h1`, or outside `h2` + inside `h2` — means the root
-  already has a title of that level and the outside one stays put). Refusing on
-  *any* inside h1–h2 was the defect that dropped the real title whenever the
-  article had subheadings and left `topHeadingLevel: 1` promoting a section
-  into the document title. **Never out of the page banner.** `role="banner"` is
-  explicit; a `<header>` that is not nested inside sectioning content or
-  `<main>` is the same thing (the ordinary blog is
-  `<body><header><h1>Site</h1></header><article>`, with no `<main>`, and lifting
-  that h1 opened the document on the site name). A title header *inside*
-  `<main>` is not a banner and may still yield its h1. A lifted `h1` sets
-  `metrics.hasH1` so a consumer that asks whether it got a whole document sees
-  the title that was outside the root. Capture already takes the contents of
-  each element it is handed (`highlightsToMd`), so `[h1, article]` arrives
-  intact; joining several fragments already exists (`join-fragments.ts`).
+  threshold. Headings are lifted under a narrow rule: every preceding `h1`–`h2`
+  under the same sectioning parent, with no other `<article>` between them, not
+  in the page banner and not under furniture — then the one that **strictly
+  outranks** every heading the root already holds (level, not distance and not
+  mere presence: an inside `h2` must not block an outside `h1`; equal rank means
+  the root already has a title of that level). Distance alone was wrong twice:
+  refusing on *any* inside heading dropped the title whenever the article had
+  subheadings; stopping at the *nearest* preceding heading left the walk on a
+  deck `<h2>` that the level rule then refused, so the real `<h1>` two steps
+  away never ran and the capture opened on body prose. The standard news shape
+  is title + standfirst + body; the title is chosen by rank, and the nearest
+  subordinate heading (the deck) comes along as a second list entry — only that
+  one, so a bare section-nav h2 between title and body is not swept in wholesale.
+  **Never out of the page banner.** `role="banner"` is explicit; a `<header>`
+  that is not nested inside sectioning content or `<main>` is the same thing
+  (the ordinary blog is `<body><header><h1>Site</h1></header><article>`, with no
+  `<main>`, and lifting that h1 opened the document on the site name). A title
+  header *inside* `<main>` is not a banner and may still yield its h1. A lifted
+  `h1` sets `metrics.hasH1` so a consumer that asks whether it got a whole
+  document sees the title that was outside the root. Capture already takes the
+  contents of each element it is handed (`highlightsToMd`), so
+  `[h1, h2, article]` arrives intact; joining several fragments already exists
+  (`join-fragments.ts`).
 - **Furniture inside a wide root is a list of selectors, not a rewrite.** When a
   site wraps everything in `<main>`, the capture would keep the `<nav>`, the
   newsletter `<aside>` and the "read next" strip. `CaptureOptions.exclude`

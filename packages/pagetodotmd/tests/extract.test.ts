@@ -111,6 +111,29 @@ const CORPUS: Case[] = [
     },
   },
   {
+    // Title + deck above article with its own section h2. Nearest preceding is
+    // the deck; choosing by distance alone refused the lift and dropped the h1.
+    file: 'heading-above-with-deck.html',
+    must: [
+      'The real title of the investigation',
+      'A deck that explains the title in one sentence',
+      'A section inside the body',
+    ],
+    mustNot: ['SiteName Media Group', 'Sign in'],
+    check: (_doc, result) => {
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.nodes.length).toBe(3);
+      expect(result.nodes[0]!.tagName.toLowerCase()).toBe('h1');
+      expect(result.nodes[0]!.textContent).toContain('The real title of the investigation');
+      expect(result.nodes[1]!.tagName.toLowerCase()).toBe('h2');
+      expect(result.nodes[1]!.textContent).toContain('A deck that explains the title');
+      expect(result.nodes[2]!.tagName.toLowerCase()).toBe('article');
+      // Lifted h1 must count even though the scored root was the article alone.
+      expect(result.metrics.hasH1).toBe(true);
+    },
+  },
+  {
     file: 'wide-main-furniture.html',
     must: [
       'An essay wrapped only in main',
@@ -389,5 +412,26 @@ describe('findArticle → highlightsToMd (selection profile)', () => {
     });
     expect(md).toContain('The real title of this investigation');
     expect(md).not.toContain('Site or category');
+  });
+
+  test('title + deck above article: both reach Markdown, title stays #', () => {
+    const doc = load('heading-above-with-deck.html');
+    const found = findArticle(doc);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    expect(found.nodes.length).toBe(3);
+    expect(found.metrics.hasH1).toBe(true);
+
+    const { md } = highlightsToMd(found.nodes, doc, {
+      exclude: found.exclude,
+      conversion: selectionConversion,
+    });
+    // Without the multi-candidate lift, nodes were [article] and the document
+    // opened on body prose; with only the nearest heading, the deck blocked the h1.
+    expect(md).toMatch(/^#\s+The real title of the investigation/m);
+    expect(md).toContain('A deck that explains the title in one sentence');
+    expect(md).toContain('A section inside the body');
+    expect(md.trimStart().startsWith('# A deck')).toBe(false);
+    expect(md).not.toContain('SiteName Media Group');
   });
 });
