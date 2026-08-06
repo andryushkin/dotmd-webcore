@@ -18,6 +18,8 @@ import {
 } from '../src/capture.js';
 import {
   IMAGE_ADDRESS_ATTRS,
+  collectCurrentSrc,
+  imageAddressSignature,
   materializeCurrentSrc,
   openDetails,
 } from '../src/clone-edits.js';
@@ -195,10 +197,45 @@ describe('openDetails', () => {
   });
 });
 
+describe('imageAddressSignature and collectCurrentSrc', () => {
+  // bun test cannot prove that collectCurrentSrc's *values* are a browser's
+  // real currentSrc — under linkedom / happy-dom the property is undefined, so
+  // the map comes back with empty strings. What is held here is the keying.
+
+  it('is the single spelling both collect and materialize use for the key', () => {
+    const doc = page(
+      `<img src="a.jpg" data-src="lazy-a.jpg" alt="A" />` +
+        `<img src="b.jpg" data-src="lazy-b.jpg" alt="B" />`,
+    );
+    const map = collectCurrentSrc(doc.body);
+    for (const img of Array.from(doc.querySelectorAll('img'))) {
+      expect(map.has(imageAddressSignature(img))).toBe(true);
+    }
+    expect(map.size).toBe(2);
+  });
+
+  it('does not mutate the live root', () => {
+    const doc = page('<img src="a.jpg" data-src="lazy.jpg" alt="A" />');
+    const before = doc.body.innerHTML;
+    collectCurrentSrc(doc.body);
+    expect(doc.body.innerHTML).toBe(before);
+  });
+
+  it('collapses two images with identical address attributes to one entry', () => {
+    // Same address set → same image to the reader → same currentSrc; a
+    // collision is harmless by construction.
+    const doc = page(
+      `<img src="same.jpg" data-src="lazy.jpg" alt="one" />` +
+        `<img src="same.jpg" data-src="lazy.jpg" alt="two" />`,
+    );
+    expect(collectCurrentSrc(doc.body).size).toBe(1);
+  });
+});
+
 describe('materializeCurrentSrc', () => {
   // bun test cannot verify a live currentSrc: under linkedom / happy-dom
   // `img.currentSrc` is undefined. The tests below pass the value in through
-  // the callback, which is the whole point of the signature.
+  // the callback or a hand-built map, which is the whole point of the hand-off.
 
   it('writes the live currentSrc into src and strips exactly the paired address attributes', () => {
     const doc = page(
@@ -234,7 +271,9 @@ describe('materializeCurrentSrc', () => {
   it('strips every name extractImageUrl reads — the list is the pair', () => {
     // If extractImageUrl gains a source and IMAGE_ADDRESS_ATTRS does not, this
     // is the test that should be extended with the new name. The constant is
-    // the single spelling on this side.
+    // the single spelling on this side. data-noscript-src is included even
+    // though the sanitizer only writes it during conversion — see the list's
+    // own comment.
     expect([...IMAGE_ADDRESS_ATTRS]).toEqual([
       'data-src',
       'data-original',
@@ -303,6 +342,65 @@ describe('materializeCurrentSrc', () => {
     );
     expect(toMarkdown(fixed as unknown as Node).trim()).toBe(
       '![X](https://cdn.example.com/actual.webp)',
+    );
+  });
+
+  it('a map keyed by imageAddressSignature survives images dropped from the clone', () => {
+    // The defect a document-order zip has: the live root holds furniture images
+    // that dropOwnUI / exclude remove from the clone, and every image after the
+    // first dropped one would get the next address. The signature key finds the
+    // survivors by the attributes they still carry.
+    const doc = page(
+      `<img src="nav.jpg" data-src="nav-lazy.jpg" alt="furniture" />` +
+        `<img src="hero.jpg" data-src="hero-lazy.jpg" alt="hero" />` +
+        `<img src="icon.jpg" data-src="icon-lazy.jpg" alt="furniture" />` +
+        `<img src="body.jpg" data-src="body-lazy.jpg" alt="body" />`,
+    );
+    // Hand-built map: under happy-dom currentSrc is undefined, so collect alone
+    // cannot supply usable values. The keys are still imageAddressSignature —
+    // the single spelling both halves use.
+    const map = new Map<string, string>();
+    for (const img of Array.from(doc.querySelectorAll('img'))) {
+      map.set(
+        imageAddressSignature(img),
+        `https://cdn.example.com/${img.getAttribute('alt')}.webp`,
+      );
+    }
+
+    const range = doc.createRange();
+    range.selectNodeContents(doc.body);
+    const fragment = range.cloneContents();
+    // Drop the furniture the way exclude / own-UI would.
+    for (const img of Array.from(fragment.querySelectorAll('img'))) {
+      const alt = img.getAttribute('alt');
+      if (alt === 'furniture') img.remove();
+    }
+    expect(fragment.querySelectorAll('img')).toHaveLength(2);
+
+    materializeCurrentSrc(fragment, map);
+
+    const [hero, body] = Array.from(fragment.querySelectorAll('img'));
+    expect(hero!.getAttribute('src')).toBe('https://cdn.example.com/hero.webp');
+    expect(body!.getAttribute('src')).toBe('https://cdn.example.com/body.webp');
+    expect(hero!.hasAttribute('data-src')).toBe(false);
+    expect(body!.hasAttribute('data-src')).toBe(false);
+  });
+
+  it('accepts the map collectCurrentSrc returns, keyed the same way', () => {
+    const doc = page('<img src="a.jpg" data-src="lazy.jpg" alt="A" />');
+    const collected = collectCurrentSrc(doc.body);
+    // Override the empty happy-dom value so materialize has something to write;
+    // the key is still whatever collect used.
+    const key = imageAddressSignature(doc.querySelector('img')!);
+    expect(collected.has(key)).toBe(true);
+    collected.set(key, 'https://cdn.example.com/from-collect.webp');
+
+    const range = doc.createRange();
+    range.selectNodeContents(doc.body);
+    const fragment = range.cloneContents();
+    materializeCurrentSrc(fragment, collected);
+    expect(fragment.querySelector('img')!.getAttribute('src')).toBe(
+      'https://cdn.example.com/from-collect.webp',
     );
   });
 });

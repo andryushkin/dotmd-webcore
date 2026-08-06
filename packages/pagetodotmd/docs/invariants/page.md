@@ -48,12 +48,18 @@ of a pair whose other end is in that sheet.
   address is whatever the markup lists. Mechanism lives here; which product flips
   the switch is that product's. Both edit the clone only — never the live page —
   so a site's `toggle` handlers and `<details name>` groups stay out of the
-  capture. `materializeCurrentSrc` takes live `currentSrc` values in through its
-  signature because a detached clone has no layout answer; under linkedom
-  `img.currentSrc` is `undefined`, so Chrome is the last word. The attributes it
-  strips are a **pair** with `extractImageUrl` in the converter: every source of
-  an address there is a name that must come off the clone here, or writing `src`
-  alone changes nothing.
+  capture. Live `currentSrc` is a layout answer a detached clone does not have,
+  so the consumer builds a map with `collectCurrentSrc` on the live root
+  **before** the capture (read-only — no attribute is written, or the style
+  snapshot that follows would pay a recalculation per element) and hands it to
+  `materializeCurrentSrc`. The key is `imageAddressSignature` and only that —
+  address attributes the clone still carries after `dropOwnUI` / `exclude`, not
+  a document-order zip (which mis-assigns every image after the first excluded
+  one) and not a mark on the live node. Under linkedom `img.currentSrc` is
+  `undefined`, so Chrome is the last word on the values. The attributes stripped
+  are a **pair** with `extractImageUrl` in the converter (`IMAGE_ADDRESS_ATTRS`):
+  every source of an address there is a name that must come off the clone here,
+  or writing `src` alone changes nothing.
 
 ## The namespace
 

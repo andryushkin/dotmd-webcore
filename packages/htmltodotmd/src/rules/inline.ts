@@ -1071,6 +1071,14 @@ function parseSrcset(srcset: string): string {
  * `src=" "` names nothing — yet untrimmed it is truthy, which both hid the
  * no-URL case from the caller and let a lazy-load attribute holding a single
  * space shadow the real `src` beside it.
+ *
+ * PAIR with `IMAGE_ADDRESS_ATTRS` in `pagetodotmd/src/clone-edits.ts`: that list
+ * is every name this function reads as an address (not `src` itself — that is
+ * what a reading-mode product rewrites). Stripped from a clone before `src` is
+ * set to a live `currentSrc`; a source taught here and not there leaves the
+ * largest `srcset` candidate winning again. `data-noscript-src` is the one this
+ * side writes during sanitise (`hoistNoscriptImageSrc`) rather than the page —
+ * the pair still names it, because this function still reads it.
  */
 function extractImageUrl(img: Element): string {
   const attr = (name: string) => (img.getAttribute(name) ?? '').trim();
