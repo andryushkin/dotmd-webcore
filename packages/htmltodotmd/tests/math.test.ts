@@ -856,3 +856,99 @@ describe('носитель без синтаксиса LaTeX', () => {
     expect(md(html)).toBe('$a < b$');
   });
 });
+
+// A formula the page wrote as dollars in a text node, with no KaTeX wrapper and
+// no annotation. Escaping is correct for prose — `C:\Users\test` must stay
+// doubled — and that same doubling destroyed `\Gamma` into a stack of words once
+// the dialect read `\\` as a LaTeX line break. The annotation path already left
+// backslashes alone; only this shape was wrong. Recognition uses the same three
+// Pandoc conditions on the dollars that `dotmdtohtml` asks of its tokenizer.
+describe('raw dollars in page text', () => {
+  const md = (html: string, options: MarkItDownOptions = { math: true }) =>
+    toMarkdown(html, options);
+
+  // The three shapes measured when the defect was found, each kept as it was.
+  it('annotation still emits a single backslash', () => {
+    const html =
+      '<span class="katex"><annotation encoding="application/x-tex">\\Gamma</annotation></span>';
+    expect(md(html).trim()).toBe('$\\Gamma$');
+  });
+
+  it('a formula written as text keeps a single backslash', () => {
+    expect(md('<p>$$\\Gamma = \\nu_0$$</p>').trim()).toBe('$$\\Gamma = \\nu_0$$');
+    expect(md('<p>Inline $\\nu_0$ here.</p>').trim()).toBe('Inline $\\nu_0$ here.');
+  });
+
+  it('a path in prose is still doubled', () => {
+    expect(md('<p>C:\\Users\\test</p>').trim()).toBe('C:\\\\Users\\\\test');
+  });
+
+  // The switch is the whole of the policy: with math off, every character is
+  // prose and a backslash the page showed is doubled so the file shows one.
+  it('math: false leaves raw dollars as prose', () => {
+    expect(md('<p>$$\\Gamma = \\nu_0$$</p>', {}).trim()).toBe('$$\\\\Gamma = \\\\nu_0$$');
+    expect(md('<p>Inline $\\nu_0$ here.</p>', {}).trim()).toBe('Inline $\\\\nu_0$ here.');
+  });
+
+  // Pandoc's three conditions: prices open nothing, so their neighbouring
+  // prose — and any backslash in it — still goes through the prose path.
+  it('a price is not a formula', () => {
+    expect(md('<p><strong>$129.00</strong> <del>$159.00</del></p>').trim()).toBe(
+      '**$129.00** ~~$159.00~~',
+    );
+    expect(md('<p>Costs $5 and $7 in total.</p>').trim()).toBe('Costs $5 and $7 in total.');
+    // A path next to a price still doubles; a real formula next to a price does not.
+    expect(md('<p>Was $12, now $\\alpha$, path C:\\x</p>').trim()).toBe(
+      'Was $12, now $\\alpha$, path C:\\\\x',
+    );
+  });
+
+  // Code never reaches the escaper: a listing stays a listing, the same reason
+  // the old regex-over-the-note pass in the sibling package was replaced.
+  it('dollars inside code are left for the fence, not the formula', () => {
+    expect(md('<p>use <code>$PATH</code> and <code>$\\nu</code></p>').trim()).toBe(
+      'use `$PATH` and `$\\nu`',
+    );
+    expect(md('<pre><code>echo $PATH$HOME\n\\frac{a}{b}\n</code></pre>').trim()).toBe(
+      '```\necho $PATH$HOME\n\\frac{a}{b}\n```',
+    );
+  });
+
+  // Only a round trip proves the defect is gone: Markdown that still holds
+  // `\\Gamma` is what KaTeX stacks into words, even when the converter "kept"
+  // the dollars.
+  it('the fixture round-trips into a formula the typesetter draws', async () => {
+    const { createMarkdownRenderer } = await import('../../dotmdtohtml/src/index.js');
+    const { Marked } = await import('marked');
+    const { Window } = await import('happy-dom');
+
+    const html =
+      '<article><p>$$\\Gamma = \\nu_0$$</p><p>Inline $\\nu_0$ here.</p></article>';
+    const note = md(html);
+    expect(note).toBe('$$\\Gamma = \\nu_0$$\n\nInline $\\nu_0$ here.\n');
+
+    const win = new Window();
+    const container = win.document.createElement('div');
+    win.document.body.appendChild(container);
+
+    const katex = {
+      renderToString: (latex: string, options: { displayMode: boolean }) =>
+        `<span class="katex" data-mode="${options.displayMode ? 'display' : 'inline'}">${latex}</span>`,
+    };
+    const renderer = createMarkdownRenderer({
+      Marked: Marked as never,
+      sanitize: (s: string) => s,
+      katex,
+    });
+    renderer.renderInto(container as unknown as Element, note);
+
+    const drawn = [...container.querySelectorAll('.katex')].map((el) => ({
+      mode: el.getAttribute('data-mode'),
+      latex: el.textContent,
+    }));
+    expect(drawn).toEqual([
+      { mode: 'display', latex: '\\Gamma = \\nu_0' },
+      { mode: 'inline', latex: '\\nu_0' },
+    ]);
+  });
+});

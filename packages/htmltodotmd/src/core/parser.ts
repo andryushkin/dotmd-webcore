@@ -19,9 +19,8 @@ import { emitsEmphasis, emitsStrike } from '../utils/flanking.js';
 import { SEMANTIC_BLOCKS } from '../utils/blocks.js';
 import {
   escapeBlockStarts,
-  escapeHtmlSyntax,
-  escapeInlineMarkdown,
   escapeMathTags,
+  escapePageText,
   mayOpenLink,
 } from './escape.js';
 
@@ -729,7 +728,13 @@ export function convert(node: Node, options: MarkItDownOptions): string {
     const seam = { behind: wantsTilde ? writtenBefore(node) : '', ahead: ahead.text };
     // HTML escaping comes after the Markdown pass, which doubles backslashes: run
     // the other way round and the `\<` this adds would be doubled into a literal.
-    const escaped = escapeHtmlSyntax(escapeInlineMarkdown(own, seam), ahead.continues);
+    // With `math: true`, a `$…$` / `$$…$$` the dialect will draw keeps its
+    // backslashes — the annotation path already did, and a formula the page
+    // wrote as plain text was the one that lost them.
+    const escaped = escapePageText(own, seam, {
+      math: options.math === true,
+      continues: ahead.continues,
+    });
     return MAY_OPEN_MARKUP.test(escaped) && opensBlock(node, options)
       ? escapeBlockStarts(escaped)
       : escaped;

@@ -99,6 +99,22 @@ container leaves behind; the half that measures is the clipper's
   neutralized, because that is what can close a fallback cell. It becomes `\lt`/`\gt` and not
   `&lt;`/`&gt;`: an entity is inert but is not LaTeX, and KaTeX draws it as an error in red — safe
   and unreadable. Measured against the bundled KaTeX, both ways.
+- **With `math: true`, a `$…$` / `$$…$$` the dialect will draw is not prose either.** A page that
+  carries `$$\Gamma = \nu_0$$` as plain text — no KaTeX wrapper, no annotation — used to reach the
+  file as `$$\\Gamma = \\nu_0$$`: every backslash doubled, because escaping is correct for prose and
+  a path `C:\Users\test` must stay `C:\\Users\\test`. The dialect then reads `\\` as a LaTeX line
+  break, and the formula is stacked into words. The annotation path already knew it was emitting
+  mathematics and escaped nothing; only a formula the page spelled as text was wrong. Recognition
+  uses Pandoc's three conditions on the *dollars*, not the body — an opening dollar is not followed
+  by a blank, a closing one is not preceded by one, and a closing one is not followed by a digit —
+  which is exactly what `dotmdtohtml/src/maths.ts` asks of its tokenizer. Spelled again here because
+  neither package may depend on the other, so the pair is the conditions rather than a shared import:
+  move one, move the other. Per text node, like every other escape: a formula the page bolded in the
+  middle is several nodes and is not re-stitched. Inside `pre` / `code` this is never asked — those
+  return before the escaper runs, so `` `$PATH` `` and a fenced shell listing stay listings. With
+  `math: false` nothing changes: every character is prose, dollars included. A `$` that opens nothing
+  (a price, `Costs $5 and $7`) is prose and is escaped as prose; the dollars themselves were never
+  escaped either way.
 - **The delimiter behind those two commands is `{}` and never a space**, though a space is LaTeX's
   own. A control word has to be parted from the letter behind it — `\ltx-foo` is one unknown command
   — and while the parting was a space, a formula the page *ended* with a tag ended with a blank.

@@ -6,8 +6,7 @@ import { CODE_INDENT_MARK } from '../core/normalizer.js';
 import { FALLBACK_ATTR_PATTERN } from '../fallback-tags.js';
 import {
   escapeBlockStarts,
-  escapeHtmlSyntax,
-  escapeInlineMarkdown,
+  escapePageText,
   escapeTagStarts,
   mayOpenLink,
 } from '../core/escape.js';
@@ -116,7 +115,7 @@ function escapeCellPipes(text: string): string {
  * beginning of a line, which a text node — or a cell — is not. Whoever builds
  * the line escapes them.
  */
-function escapeCellText(text: string, node?: Node): string {
+function escapeCellText(text: string, node?: Node, math = false): string {
   // The same lookahead the parser gives a text node, for the same reason: a cell
   // is not one string either. `<td>a &lt;<span>img src=…&gt;</span></td>` reached
   // the file as a working tag, and `<td>[y<span>](url)</span></td>` as a link the
@@ -128,9 +127,13 @@ function escapeCellText(text: string, node?: Node): string {
   // there is no one place to ask. A tilde therefore pairs within its own node or
   // with what follows — the direction that matters, since the `~~` of a `<del>`
   // reaching a cell is written by a rule this walk runs itself.
-  return escapeHtmlSyntax(
-    escapeInlineMarkdown(text, { ahead: ahead?.text ?? '' }),
-    ahead?.continues ?? false,
+  //
+  // `math` is the same switch `convert()` asks: a formula written as dollars in a
+  // cell is still a formula, and this path never reaches the parser's escaper.
+  return escapePageText(
+    text,
+    { ahead: ahead?.text ?? '' },
+    { math, continues: ahead?.continues ?? false },
   );
 }
 
@@ -373,7 +376,7 @@ function getCellContent(
       // Straight from textContent, so convert()'s escaping never saw it: a cell
       // reading `**bold**` on the page rendered as bold, and one reading
       // `<img src=x onerror=…>` put working markup in the file.
-      text += escapeCellText(child.textContent ?? '', child);
+      text += escapeCellText(child.textContent ?? '', child, options.math === true);
     }
   }
   // A style on the cell itself, which this walk would otherwise never see: it
@@ -903,6 +906,8 @@ export const TABLE_RULES: Rule[] = [
                     // still marks where it was.
                     // A newline inside a cell would split the row this mode builds.
                     textWithLineBreaks(c).trim().replace(/\s*\n+\s*/g, ' '),
+                    undefined,
+                    options.math === true,
                   ),
                 ),
               )

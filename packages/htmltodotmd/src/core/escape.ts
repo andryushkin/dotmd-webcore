@@ -254,6 +254,145 @@ export function escapeInlineMarkdown(text: string, seam: Seam = {}): string {
 }
 
 /**
+ * The page's own text on its way into the file: Markdown marks and HTML both.
+ *
+ * With `math: true`, a run the dialect would read as a formula is left alone —
+ * see `escapeProseKeepingMath`. With `math: false` (the default) every character
+ * is prose, and a backslash the page showed is doubled so the file shows one.
+ */
+export function escapePageText(
+  text: string,
+  seam: Seam = {},
+  options: { math?: boolean; continues?: boolean } = {},
+): string {
+  const continues = options.continues ?? false;
+  if (options.math && text.includes('$')) {
+    return escapeProseKeepingMath(text, seam, continues);
+  }
+  return escapeHtmlSyntax(escapeInlineMarkdown(text, seam), continues);
+}
+
+/**
+ * Whether a `$` / `$$` run at `at` opens a formula the dialect will draw.
+ *
+ * The three conditions are Pandoc's and they are about the dollars, not the
+ * body — the same three `dotmdtohtml/src/maths.ts` asks of its tokenizer. Spelled
+ * again here because neither package may depend on the other (both have zero
+ * runtime dependencies, and the dependency would run the wrong way), so the pair
+ * is the *conditions* rather than a shared import: move one, move the other.
+ *
+ *   - an opening `$` is not followed by a blank
+ *   - a closing `$` is not preceded by a blank
+ *   - a closing `$` is not followed by a digit
+ *
+ * `$$…$$` has no blank/digit conditions on the reader either; the first closer
+ * wins, and an empty body (`$$$$`) opens nothing. Inline cannot cross a newline —
+ * that is the reader's rule too, and a blank line inside display is why the
+ * reader also has a block-level tokenizer, which this escaper never needs: a
+ * text node is one string.
+ *
+ * Per text node, not across tags. A formula the page bolded in the middle is
+ * several nodes, and this asks each one alone — the same boundary every other
+ * escape already has. The measured defect is a whole formula in one node.
+ *
+ * Not asked inside `pre` / `code` / a math subtree: those never reach here.
+ */
+function mathRunAt(text: string, at: number): { end: number; display: boolean } | undefined {
+  if (text[at] !== '$') return undefined;
+
+  // Display first, so `$$x$$` is never two empty inline attempts around an `x`.
+  if (text[at + 1] === '$') {
+    const close = text.indexOf('$$', at + 2);
+    // `-1` is no closer; `at + 2` is `$$$$`, which holds no formula.
+    if (close === -1 || close === at + 2) return undefined;
+    return { end: close + 2, display: true };
+  }
+
+  // Inline: opening dollar not followed by a blank.
+  const afterOpen = text[at + 1];
+  if (afterOpen === undefined || afterOpen === ' ' || afterOpen === '\t' || afterOpen === '\n' || afterOpen === '\r') {
+    return undefined;
+  }
+
+  // Body has no `$` and no newline; the closer is the first `$` that is not
+  // preceded by a blank and not followed by a digit.
+  for (let i = at + 1; i < text.length; i += 1) {
+    const ch = text[i]!;
+    if (ch === '\n' || ch === '\r') return undefined;
+    if (ch !== '$') continue;
+    const before = text[i - 1]!;
+    if (before === ' ' || before === '\t') return undefined;
+    // Empty body `$ $` already failed the open; `$ $` with no blank is `$$`,
+    // which was taken as display above. A lone `$$` mid-scan cannot be inline.
+    if (i === at + 1) return undefined;
+    const afterClose = text[i + 1];
+    if (afterClose !== undefined && afterClose >= '0' && afterClose <= '9') return undefined;
+    return { end: i + 1, display: false };
+  }
+  return undefined;
+}
+
+/**
+ * Escape prose, but not the inside of a formula the page wrote as dollars.
+ *
+ * A page carrying `$$\Gamma = \nu_0$$` as plain text used to reach the file as
+ * `$$\\Gamma = \\nu_0$$`: every backslash doubled, because escaping is correct
+ * for prose and a path `C:\Users\test` must stay `C:\\Users\\test`. The dialect
+ * then reads `\\` as a LaTeX line break, and the formula is destroyed. The
+ * annotation path never hit this — it emits mathematics and escapes nothing —
+ * so only a formula spelled as text on the page was wrong.
+ *
+ * Recognition uses the same dollars the reader does (`mathRunAt`), and only
+ * with `math: true`. With `math: false` the caller never reaches this function,
+ * and a page about prices keeps every backslash the prose path writes. A `$`
+ * that opens nothing is prose and is escaped as prose; the dollars themselves
+ * were never escaped either way.
+ */
+function escapeProseKeepingMath(text: string, seam: Seam, continues: boolean): string {
+  let out = '';
+  let cursor = 0;
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== '$') {
+      i += 1;
+      continue;
+    }
+    const run = mathRunAt(text, i);
+    if (!run) {
+      i += 1;
+      continue;
+    }
+    if (cursor < i) {
+      const prose = text.slice(cursor, i);
+      // A segment that ends before the node does cannot have an unfinished tag
+      // completed by what follows: the next character is `$`, which completes
+      // neither a tag name nor a character reference.
+      const gap: Seam = { ahead: text.slice(i) };
+      if (cursor === 0 && seam.behind !== undefined) gap.behind = seam.behind;
+      out += escapeHtmlSyntax(escapeInlineMarkdown(prose, gap), false);
+    }
+    const raw = text.slice(i, run.end);
+    const body = run.display ? raw.slice(2, -2) : raw.slice(1, -1);
+    const open = run.display ? '$$' : '$';
+    // The body is complete inside this node — the closer is here — so there is
+    // nothing left for a split tag to finish. `escapeMathTags` alone, the same
+    // pass a math rule's `toMathString` applies: neutralize a tag start, leave
+    // every backslash, underscore and asterisk the formula needs.
+    out += `${open}${escapeMathTags(body, false)}${open}`;
+    cursor = run.end;
+    i = run.end;
+  }
+  if (cursor < text.length) {
+    const prose = text.slice(cursor);
+    const tail: Seam = {};
+    if (cursor === 0 && seam.behind !== undefined) tail.behind = seam.behind;
+    if (seam.ahead !== undefined) tail.ahead = seam.ahead;
+    out += escapeHtmlSyntax(escapeInlineMarkdown(prose, tail), continues);
+  }
+  return out;
+}
+
+/**
  * The passes above only ever insert backslashes, so a match found here sits at the
  * same characters it would in the raw text — and `upcoming` can be appended raw for
  * the search, since the escaping its own node will get cannot remove a `[` or a
