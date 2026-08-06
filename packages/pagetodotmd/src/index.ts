@@ -75,3 +75,24 @@ export {
   openDetails,
 } from './clone-edits.js';
 export type { PrepareCloneContext } from './capture.js';
+
+// Which part of a live page is the article, and the fragment targets that
+// outlive the round trip. Free functions a consumer calls before a capture —
+// neither is a side effect of one.
+export {
+  findArticle,
+  visibleTextLength,
+  DEFAULT_MIN_TEXT_LENGTH,
+  type ArticleFound,
+  type ArticleMetrics,
+  type ArticleRefusal,
+  type ArticleRefused,
+  type ArticleResult,
+  type FindArticleOptions,
+} from './extract.js';
+
+export {
+  collectFragmentIds,
+  type CollectFragmentIdsOptions,
+  type FragmentTarget,
+} from './fragment-ids.js';
