@@ -63,25 +63,29 @@ const DISPLAY_MATH = /^\$\$([\s\S]+?)\$\$/;
  * by a digit. That last is what parts two amounts: the dollar of `$159.00` has a
  * `1` behind it and so cannot close anything.
  *
- * The one blank that does not part anything is the delimiter behind `\lt` and
- * `\gt`, and that exception is the other half of a pair with the converter. A
- * page may draw markup inside a formula, and `escapeMathTags` defuses it by
- * writing LaTeX's own names for the brackets — with the space LaTeX needs to tell
- * the command from the letter behind it, and eats again when the formula is
- * drawn. A formula the page ended with a tag therefore ends with that space, and
- * Pandoc's second condition threw the whole formula away: the reader was shown
- * `$\lt img src=x onerror=alert(1)\gt …$`, the file's own source, where the page
- * had drawn markup. Prose is untouched — `Costs $5 and $x` still ends in a blank
- * that no backslash put there.
+ * The second condition had an exception once, and it is worth saying why there is
+ * none now. A page may draw markup inside a formula, and the converter defuses it
+ * by writing LaTeX's own names for the brackets; those were written `\lt ` and
+ * `\gt `, with the space LaTeX needs to part a control word from the letter
+ * behind it, so a formula the page *ended* with a tag ended with a blank and this
+ * rule threw the whole formula away — the reader was shown `$\lt img
+ * src=x onerror=alert(1)\gt …$`, the file's own source. The exception that let a
+ * blank stand after `\lt`/`\gt` bought that back and charged prose for it: a rule
+ * about the dollars cannot tell a converted page from a sentence, and `Price was
+ * $12 \lt $ last year` became a formula, `See $x \lt $y$ here` became one with
+ * `y$ here` dangling behind it. The converter writes `\lt{}` and `\gt{}` now — an
+ * empty group parts the command from the next letter as well as a blank does and
+ * is not a blank — so the formula ends in a character and Pandoc's rule is whole
+ * again.
  *
- * Those two commands and not every control word, though every control word
- * carries the same delimiter. The exception is worth what the pair costs and no
- * more: `Price was $12 \approx $ last year` is a sentence about mathematics, and
- * a general rule reads it as mathematics — drawing `12≈` and taking the year with
- * it. These are the two `escapeMathTags` writes, and the only two a converted
- * page can end a formula with.
+ * A note written by the older converter still holds `\lt `, and such a formula is
+ * shown here as its own source rather than drawn. That is the standing cost and
+ * it is the cheap direction: every character the page had is on the screen, which
+ * is more than the exception could promise for the prose it ate — and the rule
+ * being Pandoc's, that file already reads as its own source in whatever the note
+ * was written for.
  */
-const INLINE_MATH = /^\$(?!\s)([^$\n]*?(?:[^$\s]|\\[lg]t ))\$(?!\d)/;
+const INLINE_MATH = /^\$(?!\s)([^$\n]*?[^$\s])\$(?!\d)/;
 
 /**
  * A token no note can hold, because it does not exist until this render begins.

@@ -93,6 +93,17 @@ container leaves behind; the half that measures is the clipper's
   neutralized, because that is what can close a fallback cell. It becomes `\lt`/`\gt` and not
   `&lt;`/`&gt;`: an entity is inert but is not LaTeX, and KaTeX draws it as an error in red — safe
   and unreadable. Measured against the bundled KaTeX, both ways.
+- **The delimiter behind those two commands is `{}` and never a space**, though a space is LaTeX's
+  own. A control word has to be parted from the letter behind it — `\ltx-foo` is one unknown command
+  — and while the parting was a space, a formula the page *ended* with a tag ended with a blank.
+  A closing dollar may not be preceded by one, so the dialect refused the whole formula and the
+  reader met `$\lt img src=x onerror=alert(1)\gt …$`, the file's own source, where the page had drawn
+  markup. An empty group parts the command as well, is eaten by the typesetter as well, and is not a
+  blank. Measured against the bundled KaTeX: the two spellings draw the same text before a letter,
+  before a digit, at the end of a formula and inside `\begin{aligned}`, differing only by an empty
+  box of no width. The pair this makes with `dotmdtohtml` is a repair on this side and nothing on
+  that one: an exception over there that let a formula end in a blank read `Price was $12 \lt $ last
+  year` as mathematics, because a rule about the dollars cannot tell a converted page from prose.
 - A `~` is escaped when a partner can reach it, never for standing at an edge. One tilde renders as
   itself, so the question is whether a second can pair with it: another in this node that flanking
   lets close what it opens (`1~5 and 7~9` pays, `~/src and ~/usr` does not — both open, neither

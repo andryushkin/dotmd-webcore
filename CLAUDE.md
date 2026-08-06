@@ -120,11 +120,13 @@ exactly why it can drift silently.
   GFM, and the renderer for it now lives here: the pair that used to span a
   repository boundary is two packages apart, and neither half moves alone. A
   consumer parsing this Markdown with anything else shows the reader four `=`
-  characters. `escapeMathTags` is the same pair in the other direction: it
-  defuses markup inside a formula by writing `\lt ` and `\gt `, delimiter space
-  and all, and the inline maths tokenizer over there has to allow that space
-  before a closing dollar or the whole formula is refused and the reader is shown
-  its source.
+  characters. `escapeMathTags` is the same pair in the other direction: it defuses
+  markup inside a formula by writing `\lt{}` and `\gt{}`, and the empty group is
+  the delimiter rather than LaTeX's own space **because** the tokenizer over there
+  refuses a closing dollar preceded by a blank. Neither side may spell that
+  delimiter as a space again: with one, a formula the page ended with a tag is
+  refused whole and the reader is shown its source, and buying it back with an
+  exception over there charges prose for it.
 
 ## Conventions
 

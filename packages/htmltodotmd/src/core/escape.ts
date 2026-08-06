@@ -373,8 +373,26 @@ export function escapeTagStarts(text: string): string {
  * open a tag with. Measured against the bundled KaTeX: `\lt`/`\gt` render clean,
  * the entity errors.
  *
- * The trailing space is LaTeX's own delimiter and is eaten when the formula is
- * drawn — without it `\ltx-foo` is one unknown command.
+ * `\lt{}` and `\gt{}`, not `\lt ` and `\gt `. A control word has to be parted
+ * from the letter behind it or `\ltx-foo` is one unknown command, and LaTeX's
+ * own delimiter for that is a space — which is what this wrote, and which cost
+ * the formula. A closing dollar may not be preceded by a blank (Pandoc's rule,
+ * and the one the dialect's tokenizer asks), so a formula the page *ended* with a
+ * tag ended with that space and was refused whole: the reader was shown `$\lt img
+ * src=x onerror=alert(1)\gt …$`, the file's own source, where the page had drawn
+ * markup. An empty group parts the command from the next letter exactly as well,
+ * is eaten by the typesetter exactly as well, and is not a blank — so the file
+ * ends the formula with a character and the rule stays whole. Measured against
+ * the bundled KaTeX: `\lt{}`/`\gt{}` and `\lt `/`\gt ` draw the same text in
+ * every position — before a letter, before a digit, at the end of a formula,
+ * inside `\begin{aligned}` — the drawing differing only by an empty box of no
+ * width.
+ *
+ * The pair this used to make with the tokenizer is gone rather than moved. It was
+ * paid for over there by an exception letting a formula end in a blank after
+ * `\lt`/`\gt`, and an exception about the dollars cannot tell this converter's
+ * output from prose: `Price was $12 \lt $ last year` became a formula, and `See
+ * $x \lt $y$ here` became one with `y$ here` left dangling behind it.
  */
 /**
  * Markup inside a formula: an opening tag, a closing one, or a comment opener.
@@ -393,7 +411,7 @@ export function escapeMathTags(latex: string, continues = false): string {
     // opener has no `>` to pair with and keeps its text.
     (match) => {
       const inner = match.slice(1);
-      return `\\lt ${inner.endsWith('>') ? `${inner.slice(0, -1)}\\gt ` : inner}`;
+      return `\\lt{}${inner.endsWith('>') ? `${inner.slice(0, -1)}\\gt{}` : inner}`;
     },
   );
   if (!continues) return escaped;
@@ -402,6 +420,6 @@ export function escapeMathTags(latex: string, continues = false): string {
   // `<` — nothing appended after `=` can make that a tag.
   return escaped.replace(
     /<(?:\/?[a-zA-Z][\w-]*(?:\s[^<>]*)?|\/|!-?)?$/,
-    (match) => `\\lt ${match.slice(1)}`,
+    (match) => `\\lt{}${match.slice(1)}`,
   );
 }

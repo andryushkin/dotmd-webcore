@@ -275,40 +275,66 @@ describe('a price is not a formula', () => {
   });
 });
 
-// The one blank that parts nothing, and the half of a pair whose other half is in
-// the converter. A page may draw markup inside a formula, and `escapeMathTags`
-// defuses it by writing LaTeX's own names for the brackets — `\lt `, `\gt ` —
-// each carrying the space LaTeX needs to tell the command from the letter behind
-// it, and eats again when the formula is drawn. A formula the page ended with a
-// tag therefore ends with that space, and Pandoc's closing condition threw the
-// whole formula away: the reader was shown `$\lt img src=x onerror=alert(1)\gt $`,
-// the file's own source, in place of the markup the page had drawn.
-describe("the delimiter behind \\lt and \\gt is not a blank", () => {
+// A formula the page ended with a tag, and the half of a pair whose other half is
+// in the converter. A page may draw markup inside a formula, and `escapeMathTags`
+// defuses it by writing LaTeX's own names for the brackets, each parted from the
+// letter behind it — because `\ltx-foo` is one unknown command — and the parting
+// used to be LaTeX's own delimiter, a space. Such a formula therefore ended with a
+// blank, Pandoc's closing condition threw the whole of it away, and the reader was
+// shown `$\lt img src=x onerror=alert(1)\gt $` — the file's own source — in place
+// of the markup the page had drawn.
+//
+// It is `\lt{}` now, an empty group, which parts the command as well and is not a
+// blank. So the repair is entirely on the converter's side and this rule has no
+// exception at all: the one that stood here let a formula end in a blank after
+// `\lt`/`\gt`, and a condition about the dollars cannot tell a converted page from
+// a sentence.
+describe('a formula the page ended with a tag', () => {
   test.each([
-    ['the shape the converter writes for a tag', '$\\lt img src=x onerror=alert(1)\\gt $'],
-    ['one the page ended with a closing tag', '$a \\lt /td\\gt $'],
-    ['a formula that is nothing else', '$\\lt $'],
-  ])('%s is still a formula', (_name, md) => {
+    ['the shape the converter writes for a tag', '$\\lt{}img src=x onerror=alert(1)\\gt{}$'],
+    ['one the page ended with a closing tag', '$a \\lt{}/td\\gt{}$'],
+    ['a formula that is nothing else', '$\\lt{}$'],
+  ])('%s is a formula', (_name, md) => {
     expect(html(md)).toContain('class="katex"');
   });
 
-  test('the formula that reaches the typesetter is the file\'s, delimiter aside', () => {
-    const { math } = renderer().render('$a \\lt /td\\gt $');
-    expect([...math.entries.values()]).toEqual([{ latex: 'a \\lt /td\\gt', display: false }]);
+  test("the formula that reaches the typesetter is the file's, to the character", () => {
+    const { math } = renderer().render('$a \\lt{}/td\\gt{}$');
+    expect([...math.entries.values()]).toEqual([{ latex: 'a \\lt{}/td\\gt{}', display: false }]);
   });
 
-  // Prose is untouched: a blank no backslash put there still parts two dollars,
-  // which is the whole of what Pandoc's condition is for. The last two are why
-  // the exception names two commands instead of allowing any control word — a
-  // sentence about mathematics is not mathematics, and a general rule draws
-  // `12≈` and takes the rest of the sentence into the formula with it.
+  // Prose is untouched, and this is what the exception cost while it stood: each
+  // of these was read as mathematics, and the third left `y$ here` dangling in the
+  // text behind a formula drawn out of a sentence. A blank no backslash put there
+  // parts two dollars, which is the whole of what Pandoc's condition is for.
   test.each([
     ['two amounts', 'Costs $5 and $x in total.'],
     ['a trailing blank inside the dollars', 'a $b and c $ d'],
     ['a sentence about a formula', 'Price was $12 \\approx $ last year.'],
-    ['a command that is not one of the two', 'A $100 \\times $ multiplier'],
+    ['a price the exception used to eat', 'Price was $12 \\lt $ last year.'],
+    ['a multiplier the exception used to eat', 'A $100 \\gt $ multiplier'],
+    ['a path the exception used to eat', 'path $C:\\gt $ end'],
   ])('%s is not a formula', (_name, md) => {
     expect(html(md)).not.toContain('class="katex"');
+  });
+
+  // The case where the exception did not merely add a formula but cut the line in
+  // two. `$x \lt ` ran to the dollar in front of `y`, so `x <` was drawn and the
+  // rest of the sentence went on as `y$ here` — text that stands in no file. Both
+  // readings draw something here, because `$y$` on its own is a formula by every
+  // rule there is; what the exception cost is the six characters in front of it.
+  test('a sentence the exception used to cut in two keeps its text', () => {
+    expect(text('See $x \\lt $y$ here')).toBe('See $x \\lt y here');
+  });
+
+  // A note the older converter wrote holds `\lt `, and it is shown as its own
+  // source rather than drawn. That is the standing price of having no exception,
+  // and it is the cheap direction: every character the page had is still on the
+  // screen. Pinned so the choice is a decision and not a drift.
+  test('a note the older converter wrote keeps every character', () => {
+    const md = '$\\lt img src=x onerror=alert(1)\\gt $';
+    expect(html(md)).not.toContain('class="katex"');
+    expect(text(md)).toBe(md);
   });
 });
 
