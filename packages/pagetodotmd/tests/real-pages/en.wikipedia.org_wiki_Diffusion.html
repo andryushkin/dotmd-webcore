@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en" class="client-nojs vector-feature-toc-pinned-clientpref-1">
+<head>
+<meta charset="utf-8">
+<title>Diffusion</title>
+<!--
+  Structural reconstruction of Vector 2022 around
+  https://en.wikipedia.org/wiki/Diffusion (fetched 2026-08-07).
+  Prose is original; see README.md.
+  Defect: titlebar nav.vector-toc-landmark with "Toggle the table of contents"
+  and #p-lang-btn "81 languages" sat inside main and led the Markdown; tools
+  landmarks must also drop. A class-name TOC exemption must not protect the
+  empty titlebar control.
+-->
+</head>
+<body class="skin-vector-2022">
+
+<div class="mw-page-container">
+  <div class="mw-page-container-inner">
+
+    <!-- Site column: outside main; must not become the article root. -->
+    <div class="vector-column-start">
+      <nav id="mw-panel" class="vector-main-menu-landmark" aria-label="Site">
+        <a href="/wiki/Main_Page">Main page</a>
+        <a href="/wiki/Special:Random">Random</a>
+      </nav>
+      <nav id="mw-panel-toc" aria-label="Contents"
+           class="mw-table-of-contents-container vector-toc-landmark">
+        <div id="vector-toc" class="vector-toc vector-pinnable-element">
+          <button type="button" class="vector-pinnable-header-pin-button"
+                  aria-label="Move Contents to sidebar">move to sidebar</button>
+          <button type="button" class="vector-pinnable-header-unpin-button"
+                  aria-label="Hide Contents">hide</button>
+          <ul class="vector-toc-contents" id="mw-panel-toc-list">
+            <li class="vector-toc-list-item">
+              <a class="vector-toc-link" href="#"><div class="vector-toc-text">(Top)</div></a>
+            </li>
+            <li class="vector-toc-list-item">
+              <a class="vector-toc-link" href="#History">
+                <div class="vector-toc-text">History</div>
+              </a>
+            </li>
+            <li class="vector-toc-list-item">
+              <a class="vector-toc-link" href="#Models">
+                <div class="vector-toc-text">Models</div>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </nav>
+    </div>
+
+    <main id="content" class="mw-body">
+      <header class="mw-body-header vector-page-titlebar">
+        <!-- Empty titlebar TOC control: class looks like a TOC, zero fragment links. -->
+        <nav aria-label="Contents" class="vector-toc-landmark">
+          <div id="vector-page-titlebar-toc"
+               class="vector-dropdown vector-page-titlebar-toc"
+               title="Table of Contents">
+            <input type="checkbox" id="vector-page-titlebar-toc-checkbox"
+                   role="button" class="vector-dropdown-checkbox"
+                   aria-label="Toggle the table of contents">
+            <label for="vector-page-titlebar-toc-checkbox"
+                   class="vector-dropdown-label">
+              <span class="vector-dropdown-label-text">Toggle the table of contents</span>
+            </label>
+            <div class="vector-dropdown-content">
+              <div id="vector-page-titlebar-toc-unpinned-container"
+                   class="vector-unpinned-container"></div>
+            </div>
+          </div>
+        </nav>
+
+        <h1 id="firstHeading" class="firstHeading mw-first-heading">
+          <span class="mw-page-title-main">Diffusion</span>
+        </h1>
+
+        <!-- Language switcher: dense external links, no landmark tag. -->
+        <div id="p-lang-btn"
+             class="vector-dropdown mw-portlet mw-portlet-lang">
+          <input type="checkbox" id="p-lang-btn-checkbox" role="button"
+                 class="vector-dropdown-checkbox mw-interlanguage-selector"
+                 aria-label="81 languages"
+                 aria-description="Go to an article in another language. Available in 81 languages">
+          <label id="p-lang-btn-label" for="p-lang-btn-checkbox"
+                 class="vector-dropdown-label mw-portlet-lang-heading-81">
+            <span class="vector-dropdown-label-text">81 languages</span>
+          </label>
+          <div class="vector-dropdown-content">
+            <div class="vector-menu-content">
+              <ul class="vector-menu-content-list">
+                <li class="interlanguage-link"><a href="https://af.wikipedia.org/wiki/Diffusie" lang="af">Afrikaans</a></li>
+                <li class="interlanguage-link"><a href="https://ar.wikipedia.org/wiki/Example" lang="ar">العربية</a></li>
+                <li class="interlanguage-link"><a href="https://de.wikipedia.org/wiki/Diffusion" lang="de">Deutsch</a></li>
+                <li class="interlanguage-link"><a href="https://es.wikipedia.org/wiki/Difusi%C3%B3n" lang="es">Español</a></li>
+                <li class="interlanguage-link"><a href="https://fr.wikipedia.org/wiki/Diffusion" lang="fr">Français</a></li>
+                <li class="interlanguage-link"><a href="https://it.wikipedia.org/wiki/Diffusione" lang="it">Italiano</a></li>
+                <li class="interlanguage-link"><a href="https://ja.wikipedia.org/wiki/Example" lang="ja">日本語</a></li>
+                <li class="interlanguage-link"><a href="https://nl.wikipedia.org/wiki/Diffusie" lang="nl">Nederlands</a></li>
+                <li class="interlanguage-link"><a href="https://pl.wikipedia.org/wiki/Dyfuzja" lang="pl">Polski</a></li>
+                <li class="interlanguage-link"><a href="https://pt.wikipedia.org/wiki/Difus%C3%A3o" lang="pt">Português</a></li>
+                <li class="interlanguage-link"><a href="https://ru.wikipedia.org/wiki/Example" lang="ru">Русский</a></li>
+                <li class="interlanguage-link"><a href="https://zh.wikipedia.org/wiki/Example" lang="zh">中文</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="vector-page-toolbar">
+        <div class="vector-page-toolbar-container">
+          <div id="left-navigation">
+            <nav aria-label="Namespaces">
+              <ul>
+                <li><a href="/wiki/Diffusion">Article</a></li>
+                <li><a href="/wiki/Talk:Diffusion">Talk</a></li>
+              </ul>
+            </nav>
+          </div>
+          <div id="right-navigation" class="vector-collapsible">
+            <nav aria-label="Views">
+              <ul>
+                <li><a href="/wiki/Diffusion">Read</a></li>
+                <li><a href="/w/index.php?title=Diffusion&amp;action=edit">Edit</a></li>
+                <li><a href="/w/index.php?title=Diffusion&amp;action=history">View history</a></li>
+              </ul>
+            </nav>
+            <nav class="vector-page-tools-landmark" aria-label="Page tools">
+              <div id="vector-page-tools" class="vector-page-tools vector-pinnable-element">
+                <div class="vector-pinnable-header-label">Tools</div>
+                <button type="button" class="vector-pinnable-header-unpin-button">hide</button>
+                <ul>
+                  <li><a href="/wiki/Special:WhatLinksHere/Diffusion">What links here</a></li>
+                  <li><a href="/wiki/Special:RecentChangesLinked/Diffusion">Related changes</a></li>
+                  <li><a href="/wiki/Special:CiteThisPage">Cite this page</a></li>
+                </ul>
+              </div>
+            </nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="vector-column-end">
+        <nav class="vector-page-tools-landmark" aria-label="Page tools">
+          <div id="vector-page-tools-pinned-container" class="vector-pinned-container">
+            <div class="vector-pinnable-header-label">Tools</div>
+          </div>
+        </nav>
+        <nav class="vector-appearance-landmark" aria-label="Appearance">
+          <div id="vector-appearance" class="vector-appearance vector-pinnable-element">
+            <div class="vector-pinnable-header-label">Appearance</div>
+            <button type="button">move to sidebar</button>
+            <button type="button">hide</button>
+          </div>
+        </nav>
+      </div>
+
+      <div id="bodyContent" class="vector-body" aria-labelledby="firstHeading">
+        <div id="siteSub" class="noprint">From Wikipedia, the free encyclopedia</div>
+        <div id="mw-content-text" class="mw-body-content">
+          <p>
+            Diffusion is the net movement of anything from a region of higher
+            concentration to a region of lower concentration. A reading mode
+            must open on the article title, not on the titlebar toggle or the
+            language switcher that Vector places inside the same main element.
+          </p>
+          <p>
+            This fixture keeps the Vector landmarks that previously leaked into
+            the Markdown — the empty titlebar contents control, the interlanguage
+            portlet, and the tools strips — while the body holds only original
+            prose long enough to clear the extract length floor.
+          </p>
+          <h2 id="History">History</h2>
+          <p>
+            Early quantitative work treated diffusion as a continuous flux
+            proportional to a concentration gradient. The point of this section
+            is not encyclopedia coverage; it is a real heading the sidebar TOC
+            can point at without the sidebar being part of the capture root.
+          </p>
+          <p>
+            Additional sentences exist so paragraph density and visible text
+            both look like an article rather than a chrome shell with a teaser.
+            The scorer should pick main and the furniture list should drop the
+            interface controls listed above.
+          </p>
+          <h2 id="Models">Models</h2>
+          <p>
+            Simple models describe a diffusion flux along a single axis. More
+            elaborate models couple several species or a temperature field; the
+            fixture only needs the heading id and a short paragraph of original
+            text under the content container.
+          </p>
+          <p>
+            Closing paragraph: enough characters remain after excluding the
+            titlebar and language strip that the capture still reports success
+            with the article title as the first heading in the Markdown.
+          </p>
+        </div>
+      </div>
+    </main>
+
+  </div>
+</div>
+
+</body>
+</html>

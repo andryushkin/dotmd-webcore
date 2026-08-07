@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Introduction to the CSS cascade</title>
+<!--
+  Structural reconstruction of the MDN cascade intro layout
+  (https://developer.mozilla.org/en-US/docs/Web/CSS — fetched 2026-08-07).
+  Prose is original; see README.md. Defect guard: main content with an
+  in-document TOC (aside.reference-layout__toc > nav.reference-toc) must
+  survive furniture exclusion while the document still opens on the h1.
+-->
+</head>
+<body>
+  <header class="page-header">
+    <a href="/">MDN-shaped site chrome outside main</a>
+  </header>
+  <nav class="sidebar" aria-label="Reference">
+    <a href="/docs/Web">Web</a>
+    <a href="/docs/Web/CSS">CSS</a>
+  </nav>
+
+  <main id="content" class="layout__content">
+    <div class="layout__header reference-layout__header">
+      <h1>Introduction to the CSS cascade</h1>
+      <p>
+        The cascade is the algorithm that decides which declaration wins when
+        more than one rule sets the same property on the same element. A reading
+        mode must open on that title and keep the in-page table of contents that
+        documentation layouts put beside the body.
+      </p>
+      <p>
+        This fixture reuses the landmark shape of an MDN reference page: a main
+        column, a right-hand contents list of same-document fragment links, and
+        enough original prose that the extract scorer treats the main as a real
+        article rather than a thin shell.
+      </p>
+    </div>
+
+    <aside class="layout__right-sidebar reference-layout__toc">
+      <nav class="reference-toc">
+        <h2>In this article</h2>
+        <ul>
+          <li><a href="#origin_types">Origin types</a></li>
+          <li><a href="#cascading_order">Cascading order</a></li>
+          <li><a href="#basic_example">Basic example</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <div class="layout__body reference-layout__body">
+      <section class="content-section" aria-labelledby="origin_types">
+        <h2 id="origin_types">Origin types</h2>
+        <p>
+          Declarations arrive from the user agent, the author, and the user.
+          Each origin can also layer styles; the cascade walks origins and
+          layers before it ever compares selector specificity.
+        </p>
+        <p>
+          A documentation page that marks this section with a fragment id is
+          exactly what the in-page contents list points at. Those links must
+          remain after furniture exclusion, unlike a site chrome control that
+          only pretends to be a table of contents.
+        </p>
+      </section>
+      <section class="content-section" aria-labelledby="cascading_order">
+        <h2 id="cascading_order">Cascading order</h2>
+        <p>
+          Relevance, origin and importance, specificity, scoping proximity, and
+          finally order of appearance settle the winning value. The fixture only
+          needs enough of that story for the scorer and the TOC exemption to
+          run on a realistic shape.
+        </p>
+        <p>
+          If this section were dropped, the test could no longer assert that
+          "Cascading order" survives in the Markdown beside the introduction.
+        </p>
+      </section>
+      <section class="content-section" aria-labelledby="basic_example">
+        <h2 id="basic_example">Basic example</h2>
+        <p>
+          Two rules, one element, one property: the cascade is the reason the
+          second origin or the more specific selector is the one the reader sees
+          painted on the page.
+        </p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
