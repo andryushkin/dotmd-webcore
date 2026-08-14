@@ -17,6 +17,19 @@ import {
   wireDocumentLinks,
   type HeadingFragmentTarget,
 } from '../src/index.js';
+import type { FragmentTarget } from '../../pagetodotmd/src/fragment-ids.ts';
+
+// The keep-in-sync pair from the repository CLAUDE.md, enforced by the
+// compiler rather than by memory: `HeadingFragmentTarget` names two fields of
+// `pagetodotmd`'s `FragmentTarget` structurally, and because `headingText` is
+// optional, a rename over there would satisfy the shape while every internal
+// link quietly stopped joining. This assignment stops compiling the moment
+// either field's name or type drifts. Tests are the one place the two packages
+// may see each other — nothing published gains a dependency edge.
+const _fragmentTargetStaysAssignable: HeadingFragmentTarget = {} as Required<
+  Pick<FragmentTarget, 'id' | 'headingText'>
+>;
+void _fragmentTargetStaysAssignable;
 
 function container(html: string, url = 'https://example.com/article'): Element {
   const win = new Window({ url });

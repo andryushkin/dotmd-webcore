@@ -144,7 +144,24 @@ export function findArticle(
   doc: Document,
   options: FindArticleOptions = {},
 ): ArticleResult {
-  const isVisible = options.isVisible ?? isElementVisible;
+  // Memoized for the duration of this call. The walks below overlap — the body
+  // count, every scored candidate (candidates nest: a <main> holds the
+  // <article> it loses to), the heading lift and the furniture scan all ask
+  // about the same inner elements, so without the cache one capture asks the
+  // layout engine the same question four to fifty times per element. Nothing
+  // here mutates the document while scoring (visibility.ts holds that
+  // invariant), which is what makes a per-call cache safe; per-call rather
+  // than module-level because the page is live and the next capture may find
+  // it changed.
+  const askVisible = options.isVisible ?? isElementVisible;
+  const seenVisible = new WeakMap<Element, boolean>();
+  const isVisible = (el: Element): boolean => {
+    const hit = seenVisible.get(el);
+    if (hit !== undefined) return hit;
+    const answer = askVisible(el);
+    seenVisible.set(el, answer);
+    return answer;
+  };
   const minTextLength = options.minTextLength ?? DEFAULT_MIN_TEXT_LENGTH;
   const body = doc.body;
   const empty: ArticleMetrics = {
@@ -215,7 +232,7 @@ export function findArticle(
   return {
     ok: true,
     nodes,
-    exclude: furnitureSelectors(winner.el, isVisible),
+    exclude: furnitureSelectors(winner.el, winner.textLength, isVisible),
     metrics,
   };
 }
@@ -663,9 +680,12 @@ const FURNITURE_BODY_MIN_CHARS = 120;
  */
 function furnitureSelectors(
   root: Element,
+  // The winner's own score already walked this subtree; the number rides in
+  // rather than being re-measured, which on the article root is the single
+  // largest walk of the page.
+  rootText: number,
   isVisible: (el: Element) => boolean,
 ): string[] {
-  const rootText = visibleTextLength(root, isVisible);
   const selectors: string[] = [];
   const seen = new Set<string>();
 
