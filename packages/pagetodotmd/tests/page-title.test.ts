@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { decodeEntities, normalizePageTitle } from '../src/page-title.js';
+import { Window } from 'happy-dom';
+import { decodeEntities, findPageTitle, normalizePageTitle } from '../src/page-title.js';
 
 describe('decodeEntities', () => {
   test('decodes the standard named entities, case-sensitively', () => {
@@ -122,5 +123,90 @@ describe('normalizePageTitle', () => {
 
   test('handles an empty title', () => {
     expect(normalizePageTitle('')).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findPageTitle — which of the page's own claims about itself to believe
+// ---------------------------------------------------------------------------
+
+function page(head: string, title = ''): Document {
+  const window = new Window({ url: 'https://example.com/article' });
+  window.document.write(
+    `<!DOCTYPE html><html><head><title>${title}</title>${head}</head><body><p>x</p></body></html>`,
+  );
+  return window.document as unknown as Document;
+}
+
+describe('findPageTitle', () => {
+  test('the order of authority, one candidate removed at a time', () => {
+    const og = '<meta property="og:title" content="Open Graph">';
+    const tw = '<meta name="twitter:title" content="Twitter">';
+    const ld = '<script type="application/ld+json">{"headline":"Schema"}</script>';
+    const name = '<meta name="title" content="Name">';
+
+    expect(findPageTitle(page(og + tw + ld + name, 'Tab'))).toBe('Open Graph');
+    expect(findPageTitle(page(tw + ld + name, 'Tab'))).toBe('Twitter');
+    expect(findPageTitle(page(ld + name, 'Tab'))).toBe('Schema');
+    expect(findPageTitle(page(name, 'Tab'))).toBe('Name');
+    expect(findPageTitle(page('', 'Tab'))).toBe('Tab');
+  });
+
+  test('a page that says nothing about itself yields an empty title', () => {
+    expect(findPageTitle(page(''))).toBe('');
+  });
+
+  // A template that emitted its variable as nothing leaves the tag in place. An
+  // empty candidate is not an answer — taken as one, the file is named after the
+  // first site that ships `<meta property="og:title" content="">`.
+  test('an empty or whitespace candidate is passed over, not accepted', () => {
+    const doc = page(
+      '<meta property="og:title" content="">' +
+      '<meta name="twitter:title" content="   ">' +
+      '<meta name="title" content="Third time lucky">',
+      'Tab',
+    );
+    expect(findPageTitle(doc)).toBe('Third time lucky');
+  });
+
+  test('broken JSON-LD is stepped over, and a later block still answers', () => {
+    // Half the JSON-LD in the wild is invalid; a trailing comma is not a reason
+    // to fail a capture, and it must not stop the search either.
+    const doc = page(
+      '<script type="application/ld+json">{"headline": "unterminated</script>' +
+      '<script type="application/ld+json">{"@type":"Article","headline":"The real one"}</script>',
+      'Tab',
+    );
+    expect(findPageTitle(doc)).toBe('The real one');
+  });
+
+  test('JSON-LD with no headline at all falls through to the tab', () => {
+    const doc = page(
+      '<script type="application/ld+json">{"@type":"Organization","name":"SiteName"}</script>',
+      'Tab',
+    );
+    expect(findPageTitle(doc)).toBe('Tab');
+  });
+
+  // The defect the whole file exists for: the HTML parser decodes an attribute
+  // once, so a doubly encoded template hands back a literal `&nbsp;` that would
+  // reach the front matter and the download's file name.
+  test('the candidate is normalised, entities and no-break spaces and all', () => {
+    const doc = page(
+      '<meta property="og:title" content="10&amp;nbsp;самых &amp;laquo;тихих&amp;raquo;">',
+    );
+    expect(findPageTitle(doc)).toBe('10 самых «тихих»');
+  });
+
+  test('a title written across lines arrives as one line', () => {
+    const doc = page('<meta property="og:title" content="A title\n  split over lines">');
+    expect(findPageTitle(doc)).toBe('A title split over lines');
+  });
+
+  test('the document is the argument — a second one is answered on its own', () => {
+    const a = page('<meta property="og:title" content="First">');
+    const b = page('<meta property="og:title" content="Second">');
+    expect(findPageTitle(a)).toBe('First');
+    expect(findPageTitle(b)).toBe('Second');
   });
 });

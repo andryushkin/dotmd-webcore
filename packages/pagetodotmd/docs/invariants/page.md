@@ -282,6 +282,27 @@ The other half of this pair is under *Rows drawn side by side* in
   `&notin;` collapse to `¬in;` via the legacy `&not` name.
 - Truncate titles by grapheme (`Intl.Segmenter`), never `slice()`, which splits
   emoji sequences that then reach the front matter and the filename.
+- **`document.title` is the last candidate, not the first.** It is written for a
+  browser tab, so it carries the site name, a separator, a section and sometimes
+  an unread count — all of which reach the front matter and the download's file
+  name. `findPageTitle(doc)` asks what the page states about *itself* first, in
+  order of authority: `og:title` (published, visible in every share, therefore
+  the one sites keep correct), `twitter:title` (the same claim from a site that
+  filled in one of the two), a schema.org `headline` (the article's own, but
+  often the long or desk form), `meta[name=title]`, then the tab. First non-empty
+  wins, and a present-but-blank candidate is passed over — a template that
+  emitted nothing leaves the tag behind, and taking it as an answer names the
+  file after the site's bug. Every candidate goes through `normalizePageTitle`:
+  metadata is generated rather than typed, so it arrives doubly encoded, with a
+  newline, or with a no-break space no file name can hold. Malformed JSON-LD is
+  stepped over rather than thrown — a page's broken metadata is not a reason to
+  fail a capture. Declared limit: a `ld+json` top-level array or a `@graph` is
+  not walked.
+- **The file is split across the two entries by what it touches, not by
+  subject.** `findPageTitle` reads a document and is on the main entry;
+  `normalizePageTitle`, `decodeEntities` and `truncateGraphemes` touch no node
+  and stay on `/text`, which a service worker naming a download imports without
+  pulling a style snapshot in with it.
 - Entity behavior cannot be tested through the DOM — linkedom does not decode
   entities; tests compare against the reference table.
 

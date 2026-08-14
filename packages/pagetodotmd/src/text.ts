@@ -6,6 +6,11 @@
  * a filename, a service worker naming a download, a page that never had a
  * selection — each needs `truncateGraphemes` and none of them should pull in a
  * style snapshot to get it. The main entry is a browser package; this is not.
+ *
+ * `page-title.ts` is split across the two on that line and not by subject:
+ * `findPageTitle` reads a document's own metadata, so it is on the main entry
+ * with everything else that needs one, and `normalizePageTitle` — the pass that
+ * makes any of those candidates fit to be a file name — is here.
  */
 export { decodeEntities, normalizePageTitle } from './page-title.js';
 export { truncateGraphemes } from './truncate.js';

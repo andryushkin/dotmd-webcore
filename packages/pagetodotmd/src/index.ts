@@ -102,3 +102,8 @@ export {
 // default, exported because a consumer that scores anything else on a page
 // should ask the same question the same way rather than write a second answer.
 export { isElementVisible } from './visibility.js';
+
+// What the page calls itself. The rest of `page-title.ts` is on the `/text`
+// subpath, which promises to touch no node; this half reads a document and so
+// belongs on the browser entry with everything else that does.
+export { findPageTitle } from './page-title.js';

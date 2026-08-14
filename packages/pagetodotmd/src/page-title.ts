@@ -65,3 +65,73 @@ export function normalizePageTitle(raw: string): string {
     .trim();
   return truncate(clean, TITLE_MAX);
 }
+
+/**
+ * What this page calls itself, from the first of its own metadata that answers.
+ *
+ * `document.title` is the obvious answer and the worst one: it is written for a
+ * browser tab, so it carries the site name, a separator, an unread count, and on
+ * a news site the section as well \u2014 `Article \u2014 Section | SiteName`. All of that
+ * reaches the front matter and the download's file name, where a reader has to
+ * live with it. What a page states *about itself* is better in every case where
+ * it exists, so the ordinary sharing metadata is asked first and the tab is the
+ * fallback rather than the source.
+ *
+ * The order is the order of authority. `og:title` is what the page publishes as
+ * its own name and is the one most sites keep correct, because a wrong one is
+ * visible in every share. `twitter:title` is the same claim from a site that
+ * filled in only one of the two. `headline` from schema.org is the article's
+ * own, and it sits below the two because it is often the *long* form or a desk
+ * headline, while the Open Graph value is what the publisher chose to show.
+ * `meta[name=title]` is rare and old, worth a look before falling back. First
+ * non-empty wins; a candidate that is present but blank is passed over rather
+ * than accepted, which is what a site emitting `<meta property="og:title"
+ * content="">` needs.
+ *
+ * Every candidate goes through `normalizePageTitle`, and that is not tidiness:
+ * metadata is written by templates rather than typed, so it arrives with a
+ * doubly encoded entity, a newline from a here-document, or a no-break space
+ * that a file name cannot hold.
+ *
+ * The document is a parameter, like everything else in this package \u2014 a capture
+ * may be reading a frame, and nothing here may reach for a global.
+ *
+ * Declared limit: a `ld+json` block whose top level is an array, or a
+ * `@graph`, is not walked. Only the first block that is an object with a
+ * `headline` is read; anything malformed is stepped over rather than thrown,
+ * because a page's broken metadata is not a reason to fail a capture.
+ */
+export function findPageTitle(doc: Document): string {
+  const meta = (attribute: string, value: string): string =>
+    doc.querySelector(`meta[${attribute}="${value}"]`)?.getAttribute('content')?.trim() ?? '';
+
+  const raw =
+    meta('property', 'og:title') ||
+    meta('name', 'twitter:title') ||
+    // Asked only when the two above said nothing: parsing every JSON-LD block on
+    // a page that already named itself is work with no answer to give.
+    schemaHeadline(doc) ||
+    meta('name', 'title') ||
+    doc.title ||
+    '';
+  return normalizePageTitle(raw);
+}
+
+/** `headline` from the first JSON-LD block that has one. */
+function schemaHeadline(doc: Document): string {
+  for (const el of Array.from(doc.querySelectorAll('script[type="application/ld+json"]'))) {
+    let data: unknown;
+    try {
+      data = JSON.parse(el.textContent ?? '');
+    } catch {
+      // Half the JSON-LD in the wild is invalid \u2014 a trailing comma, a template
+      // that emitted an unquoted value. Step over the block, not the page.
+      continue;
+    }
+    if (typeof data !== 'object' || data === null) continue;
+    const headline = (data as { headline?: unknown }).headline;
+    if (headline === undefined || headline === null || headline === '') continue;
+    return String(headline).trim();
+  }
+  return '';
+}
