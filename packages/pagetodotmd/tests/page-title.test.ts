@@ -200,6 +200,31 @@ describe('findPageTitle', () => {
     expect(findPageTitle(doc)).toBe('The text one');
   });
 
+  test('a JSON-LD headline array yields its first non-blank text', () => {
+    // JSON-LD permits an array of values, and ["Title"] is an ordinary
+    // spelling of one title in the wild — rejecting it would trade a real
+    // headline for the tab. Non-text entries inside the array are stepped
+    // over the same way a non-text scalar is.
+    expect(
+      findPageTitle(
+        page('<script type="application/ld+json">{"headline": ["Array title"]}</script>', 'Tab'),
+      ),
+    ).toBe('Array title');
+    expect(
+      findPageTitle(
+        page(
+          '<script type="application/ld+json">{"headline": ["  ", 0, "Second entry"]}</script>',
+          'Tab',
+        ),
+      ),
+    ).toBe('Second entry');
+    expect(
+      findPageTitle(
+        page('<script type="application/ld+json">{"headline": [0, false]}</script>', 'Tab'),
+      ),
+    ).toBe('Tab');
+  });
+
   test('a whitespace-only headline does not end the walk', () => {
     // Returning "  ".trim() used to stop the scan with nothing: the || chain
     // moved on to the meta tags, but a real headline in the next block was
