@@ -40,7 +40,14 @@
     --dotmd-display-math-space: 1.2em;
     --dotmd-content-gap-height: 1em;
 
-    line-height: 1.7;
+    /* The token, never the property. `line-height: 1.7` outright renders the
+       same — and kills the knob: base.css derives the property from this token
+       precisely so a product may turn it again in `dotmd.product`, and a theme
+       that writes the property sits in a higher layer than base, so every
+       override below it goes quiet. That was measured, not imagined: a reader
+       product grew an inline-style workaround with this file's number in a
+       comment. A test now holds every theme to the same rule. */
+    --dotmd-line-height: 1.7;
   }
 
   @media (prefers-color-scheme: dark) {

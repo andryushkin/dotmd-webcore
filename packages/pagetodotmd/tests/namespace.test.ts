@@ -25,8 +25,14 @@ function page(html: string): Document {
   return window.document as unknown as Document;
 }
 
-/** Every name a session holds, so a new one cannot be added and forgotten here. */
-const FIELDS = Object.keys(DEFAULT_NAMESPACE) as Array<keyof CaptureNamespace>;
+/**
+ * Every name a session holds, so a new one cannot be added and forgotten here.
+ * Names only: `markOwnUI` is the one member that is a pen rather than a name,
+ * and the disjointness and uniqueness below are claims about names.
+ */
+const FIELDS = (Object.keys(DEFAULT_NAMESPACE) as Array<keyof CaptureNamespace>).filter(
+  (field) => typeof DEFAULT_NAMESPACE[field] === 'string',
+);
 
 describe('the capture namespace', () => {
   it('is frozen, so nothing can rename an attribute under a running capture', () => {
@@ -85,6 +91,26 @@ describe('registerOwnUI', () => {
     const toast = registerOwnUI(doc.createElement('div'), reader);
     expect(toast.hasAttribute(reader.ownUI)).toBe(true);
     expect(toast.hasAttribute(DEFAULT_NAMESPACE.ownUI)).toBe(false);
+  });
+
+  it('is the same pen the namespace carries as a method', () => {
+    // `ns.markOwnUI(el)` is the form with no default to get wrong: a consumer
+    // holding its own namespace cannot reach the package's prefix by accident,
+    // where the free function imported directly would hand it out.
+    const reader = captureNamespace('data-mdread');
+    const doc = page('');
+    const badge = reader.markOwnUI(doc.createElement('div'));
+    expect(badge.hasAttribute(reader.ownUI)).toBe(true);
+    expect(badge.hasAttribute(DEFAULT_NAMESPACE.ownUI)).toBe(false);
+  });
+
+  it('keeps its spelling through the spread that builds DEFAULT_NAMESPACE', () => {
+    // DEFAULT_NAMESPACE is `{...captureNamespace(prefix), style, row}` — the
+    // method rides the spread as a copied function, so it must close over its
+    // name rather than read it off whichever object it is called from.
+    const doc = page('');
+    const bubble = DEFAULT_NAMESPACE.markOwnUI(doc.createElement('div'));
+    expect(bubble.getAttribute(`${DEFAULT_PREFIX}-ui`)).toBe('');
   });
 
   it('is the half a capture under the same namespace already knows how to drop', () => {

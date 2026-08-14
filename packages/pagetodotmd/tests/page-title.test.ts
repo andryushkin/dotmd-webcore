@@ -188,6 +188,55 @@ describe('findPageTitle', () => {
     expect(findPageTitle(doc)).toBe('Tab');
   });
 
+  test('a headline that is not text is malformed metadata, not a title', () => {
+    // schema.org's headline is Text; the wild also ships numbers and booleans.
+    // String(0) would name the note "0" while the next candidate held the real
+    // answer — a non-string steps to the next block like any other broken shape.
+    const doc = page(
+      '<script type="application/ld+json">{"headline": 0}</script>' +
+      '<script type="application/ld+json">{"@type":"Article","headline":"The text one"}</script>',
+      'Tab',
+    );
+    expect(findPageTitle(doc)).toBe('The text one');
+  });
+
+  test('a JSON-LD headline array yields its first non-blank text', () => {
+    // JSON-LD permits an array of values, and ["Title"] is an ordinary
+    // spelling of one title in the wild — rejecting it would trade a real
+    // headline for the tab. Non-text entries inside the array are stepped
+    // over the same way a non-text scalar is.
+    expect(
+      findPageTitle(
+        page('<script type="application/ld+json">{"headline": ["Array title"]}</script>', 'Tab'),
+      ),
+    ).toBe('Array title');
+    expect(
+      findPageTitle(
+        page(
+          '<script type="application/ld+json">{"headline": ["  ", 0, "Second entry"]}</script>',
+          'Tab',
+        ),
+      ),
+    ).toBe('Second entry');
+    expect(
+      findPageTitle(
+        page('<script type="application/ld+json">{"headline": [0, false]}</script>', 'Tab'),
+      ),
+    ).toBe('Tab');
+  });
+
+  test('a whitespace-only headline does not end the walk', () => {
+    // Returning "  ".trim() used to stop the scan with nothing: the || chain
+    // moved on to the meta tags, but a real headline in the next block was
+    // never read.
+    const doc = page(
+      '<script type="application/ld+json">{"headline": "   "}</script>' +
+      '<script type="application/ld+json">{"headline": "Second block"}</script>',
+      'Tab',
+    );
+    expect(findPageTitle(doc)).toBe('Second block');
+  });
+
   // The defect the whole file exists for: the HTML parser decodes an attribute
   // once, so a doubly encoded template hands back a literal `&nbsp;` that would
   // reach the front matter and the download's file name.

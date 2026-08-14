@@ -61,6 +61,18 @@ export interface CaptureNamespace {
    * declare it.
    */
   readonly shadowSlot: string;
+  /**
+   * Writes this namespace's own-UI mark and hands the element back.
+   *
+   * The free function `registerOwnUI` below takes the namespace as a defaulted
+   * parameter, and a default is a loaded form: a consumer with names of its own
+   * that imports the function directly — the first thing autocomplete offers —
+   * compiles, marks its chrome under the *package's* prefix, and a capture
+   * walking the consumer's real names drops nothing; the paint arrives in the
+   * file, and no type checks. Called as a method of the namespace the consumer
+   * is already holding, there is no default to get wrong.
+   */
+  readonly markOwnUI: <T extends Element>(el: T) => T;
 }
 
 /**
@@ -70,6 +82,7 @@ export interface CaptureNamespace {
  * capture that is already running.
  */
 export function captureNamespace(prefix: string): CaptureNamespace {
+  const ownUI = `${prefix}-ui`;
   return Object.freeze({
     style: `${prefix}-style`,
     row: `${prefix}-row`,
@@ -77,9 +90,16 @@ export function captureNamespace(prefix: string): CaptureNamespace {
     origin: `${prefix}-origin`,
     originRow: `${prefix}-origin-row`,
     diagnostic: `${prefix}-debug`,
-    ownUI: `${prefix}-ui`,
+    ownUI,
     shadowMirror: `${prefix}-shadow`,
     shadowSlot: `${prefix}-shadow`,
+    // Closes over the local, not the object: the method must write the same
+    // name whether it is called off this namespace or off a copy spread into
+    // another (DEFAULT_NAMESPACE is built exactly that way).
+    markOwnUI<T extends Element>(el: T): T {
+      el.setAttribute(ownUI, '');
+      return el;
+    },
   });
 }
 
@@ -132,7 +152,9 @@ export const DEFAULT_NAMESPACE: CaptureNamespace = Object.freeze({
  * marked `data-s2md-ui` is dropped by nobody when the capture walking the page
  * looks for `data-dotmd-wr-ui`, and the reader's own chrome re-enters the
  * document it is reading. A consumer with a namespace of its own passes it here,
- * the same object it will pass to the capture.
+ * the same object it will pass to the capture — or, better, calls
+ * `namespace.markOwnUI(el)` off that object, the form with no default to get
+ * wrong.
  *
  * Never removed while the element is on the page: the mark states what the paint
  * *is*, for its whole life, not what a capture is doing to it right now.
@@ -141,8 +163,7 @@ export function registerOwnUI<T extends Element>(
   el: T,
   namespace: CaptureNamespace = DEFAULT_NAMESPACE,
 ): T {
-  el.setAttribute(namespace.ownUI, '');
-  return el;
+  return namespace.markOwnUI(el);
 }
 
 /**

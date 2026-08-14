@@ -97,8 +97,10 @@ export function normalizePageTitle(raw: string): string {
  * may be reading a frame, and nothing here may reach for a global.
  *
  * Declared limit: a `ld+json` block whose top level is an array, or a
- * `@graph`, is not walked. Only the first block that is an object with a
- * `headline` is read; anything malformed is stepped over rather than thrown,
+ * `@graph`, is not walked. Only the first block whose `headline` carries
+ * non-blank text is read — the value itself may be that text or a JSON-LD
+ * array holding it. Anything malformed — a `headline` that is a number or a
+ * boolean, alone or inside the array — is stepped over rather than thrown,
  * because a page's broken metadata is not a reason to fail a capture.
  */
 export function findPageTitle(doc: Document): string {
@@ -117,7 +119,7 @@ export function findPageTitle(doc: Document): string {
   return normalizePageTitle(raw);
 }
 
-/** `headline` from the first JSON-LD block that has one. */
+/** `headline` from the first JSON-LD block that carries one as non-blank text. */
 function schemaHeadline(doc: Document): string {
   for (const el of Array.from(doc.querySelectorAll('script[type="application/ld+json"]'))) {
     let data: unknown;
@@ -130,8 +132,19 @@ function schemaHeadline(doc: Document): string {
     }
     if (typeof data !== 'object' || data === null) continue;
     const headline = (data as { headline?: unknown }).headline;
-    if (headline === undefined || headline === null || headline === '') continue;
-    return String(headline).trim();
+    // Text or nothing. schema.org's headline is Text, but the wild also ships
+    // `{"headline": 0}` \u2014 and `String(0)` would make "0" the note's title and
+    // its file name while the next candidate held the real one. JSON-LD also
+    // permits an array of values, and `["Title"]` is an ordinary spelling of
+    // one title \u2014 so an array is walked for its first non-blank string, and a
+    // non-string (inside the array or standing alone) is stepped over like
+    // every other malformed shape here. So is text that is blank once trimmed,
+    // which used to end the walk early with nothing to show for it.
+    for (const candidate of Array.isArray(headline) ? headline : [headline]) {
+      if (typeof candidate !== 'string') continue;
+      const text = candidate.trim();
+      if (text !== '') return text;
+    }
   }
   return '';
 }
