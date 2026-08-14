@@ -58,3 +58,41 @@ export const DOTMD_CLASS = {
   /** …and whose checkbox is ticked. */
   taskDone: 'dotmd-task--done',
 } as const;
+
+/**
+ * Every custom property `base.css` declares — the public knobs of a rendered
+ * document, named here for the same reason the classes are: a consumer that
+ * reads or writes one from script (a settings panel writing the type size, an
+ * overlay copying the palette onto its own chrome) needs a spelling the
+ * compiler checks, and a hand-kept list of strings in a product is how six of
+ * these went out of sync once already. A theme overrides them and uses them; a
+ * product may override them again in `dotmd.product` — that is what makes them
+ * public, and `base.css` deriving the root's properties from them is what makes
+ * overriding work. A test holds this object and the stylesheet to the same
+ * list, both directions.
+ */
+export const DOTMD_TOKENS = {
+  /** The document face; a theme states a stack, a product may override it. */
+  font: '--dotmd-font',
+  /** Code spans and blocks. */
+  fontMono: '--dotmd-font-mono',
+  fontSize: '--dotmd-font-size',
+  lineHeight: '--dotmd-line-height',
+  background: '--dotmd-background',
+  text: '--dotmd-text',
+  textMuted: '--dotmd-text-muted',
+  link: '--dotmd-link',
+  border: '--dotmd-border',
+  /** Behind a code span, a code block and a table heading. */
+  surface: '--dotmd-surface',
+  markBackground: '--dotmd-mark-background',
+  markText: '--dotmd-mark-text',
+  radius: '--dotmd-radius',
+  /** The rhythm: what one block leaves under itself. */
+  blockSpace: '--dotmd-block-space',
+  /** …and what a heading leaves above itself. */
+  headingSpace: '--dotmd-heading-space',
+  displayMathSpace: '--dotmd-display-math-space',
+  contentGapHeight: '--dotmd-content-gap-height',
+  taskOffset: '--dotmd-task-offset',
+} as const;

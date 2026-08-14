@@ -23,6 +23,19 @@ export interface DotmdTheme {
 }
 
 /**
+ * What every specifier below starts with — the package's name, which is the
+ * manifest's to state, not a consumer's to guess.
+ *
+ * A consumer that ships the `styles/` tree at a root of its own turns a
+ * specifier into a path by stripping exactly this prefix; one that resolves
+ * through a bundler never looks at it. The one that strips used to spell
+ * `'dotmdtohtml/'` in its own module, which held right up until the package is
+ * renamed or scoped — at which point its slice returns garbage and the first
+ * sign is a stylesheet that never arrives.
+ */
+export const DOTMD_STYLESHEET_SPECIFIER_PREFIX = 'dotmdtohtml/';
+
+/**
  * Not a theme and not optional.
  *
  * It carries the rules a document is *wrong* without rather than merely plain: a
@@ -33,7 +46,7 @@ export interface DotmdTheme {
  * loaded after this and adds to it; a theme that replaced it would have to
  * restate all three, which is the arrangement that already failed.
  */
-export const DOTMD_BASE_STYLESHEET = 'dotmdtohtml/base.css';
+export const DOTMD_BASE_STYLESHEET = `${DOTMD_STYLESHEET_SPECIFIER_PREFIX}base.css`;
 
 /**
  * Every theme, in the order a chooser should offer them.
@@ -43,6 +56,6 @@ export const DOTMD_BASE_STYLESHEET = 'dotmdtohtml/base.css';
  * indistinguishable from the implementation.
  */
 export const DOTMD_THEMES: readonly DotmdTheme[] = [
-  { id: 'reader', stylesheet: 'dotmdtohtml/themes/reader.css' },
-  { id: 'paper', stylesheet: 'dotmdtohtml/themes/paper.css' },
+  { id: 'reader', stylesheet: `${DOTMD_STYLESHEET_SPECIFIER_PREFIX}themes/reader.css` },
+  { id: 'paper', stylesheet: `${DOTMD_STYLESHEET_SPECIFIER_PREFIX}themes/paper.css` },
 ];

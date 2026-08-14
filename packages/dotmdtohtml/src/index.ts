@@ -78,6 +78,12 @@ export {
   DOTMD_COLOR_SCHEME_ATTR,
   DOTMD_SCHEMA_ATTR,
   DOTMD_SCHEMA_VERSION,
+  DOTMD_TOKENS,
 } from './schema.js';
 
-export { DOTMD_BASE_STYLESHEET, DOTMD_THEMES, type DotmdTheme } from './themes.js';
+export {
+  DOTMD_BASE_STYLESHEET,
+  DOTMD_STYLESHEET_SPECIFIER_PREFIX,
+  DOTMD_THEMES,
+  type DotmdTheme,
+} from './themes.js';
