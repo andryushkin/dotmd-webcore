@@ -13,8 +13,10 @@ import {
   DEFAULT_PREFIX,
   canonicalize,
   captureNamespace,
+  registerOwnUI,
   type CaptureNamespace,
 } from '../src/namespace.js';
+import { highlightsToMd } from '../src/capture.js';
 import { snapshotStyles } from '../src/style-snapshot.js';
 
 function page(html: string): Document {
@@ -61,6 +63,48 @@ describe('the capture namespace', () => {
       (field) => DEFAULT_NAMESPACE[field],
     );
     expect(new Set(attributes).size).toBe(attributes.length);
+  });
+});
+
+describe('registerOwnUI', () => {
+  it('marks the element and hands back the very same node', () => {
+    // The return value is what lets a consumer write
+    // `parent.appendChild(registerOwnUI(bubble))`; a copy would leave the mark
+    // on a node nobody appended.
+    const doc = page('<div id="host"></div>');
+    const bubble = doc.createElement('div');
+    const back = registerOwnUI(bubble);
+    expect(back).toBe(bubble);
+    expect(bubble.hasAttribute(DEFAULT_NAMESPACE.ownUI)).toBe(true);
+    expect(bubble.getAttribute(DEFAULT_NAMESPACE.ownUI)).toBe('');
+  });
+
+  it('writes the namespace it is given, and only that one', () => {
+    const reader = captureNamespace('data-mdread');
+    const doc = page('');
+    const toast = registerOwnUI(doc.createElement('div'), reader);
+    expect(toast.hasAttribute(reader.ownUI)).toBe(true);
+    expect(toast.hasAttribute(DEFAULT_NAMESPACE.ownUI)).toBe(false);
+  });
+
+  it('is the half a capture under the same namespace already knows how to drop', () => {
+    // The pairing, stated as the defect it prevents: a bubble registered under
+    // one consumer's namespace is invisible to a capture walking another's, and
+    // the paint reaches the file. Nothing throws when they disagree — the words
+    // simply arrive at the end of the note.
+    const reader = captureNamespace('data-mdread');
+    const doc = page('<article><p>Body text.</p></article>');
+    const article = doc.querySelector('article')!;
+    const bubble = registerOwnUI(doc.createElement('div'), reader);
+    bubble.textContent = 'add to .md';
+    article.appendChild(bubble);
+
+    const own = highlightsToMd([article], doc, { namespace: reader }).md;
+    expect(own).toContain('Body text.');
+    expect(own).not.toContain('add to .md');
+
+    const stranger = highlightsToMd([article], doc, { namespace: DEFAULT_NAMESPACE }).md;
+    expect(stranger).toContain('add to .md');
   });
 });
 

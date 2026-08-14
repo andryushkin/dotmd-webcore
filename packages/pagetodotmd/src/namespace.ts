@@ -105,6 +105,47 @@ export const DEFAULT_NAMESPACE: CaptureNamespace = Object.freeze({
 });
 
 /**
+ * Marks an element as the consumer's own paint, and hands it back.
+ *
+ * A product draws things into the page it is reading — a bubble, a hover
+ * outline, a toast, the host of an overlay — and every one of them sits in the
+ * document like any other element. A Cmd+A capture covers them: the clipper
+ * shipped `add to .md` at the end of every full-page capture it made, and a
+ * second copy inside two seconds put `Copied!` in the file as well. The capture
+ * drops what is registered here (`[namespace.ownUI]`), which is the half a list
+ * of selectors could never get right — such a list names the two elements
+ * somebody remembered.
+ *
+ * The register is a **mark on the element**, not a set of nodes, for two reasons
+ * that point the same way. `dropOwnUI` is handed a *clone*, and `cloneContents()`
+ * keeps no link back to the originals, so a set of live nodes could not be
+ * matched against a fragment at all while an attribute is copied along with
+ * everything else. And a mark holds nothing: a toast is gone from the page two
+ * seconds after it appears, and a register keeping its own reference would keep
+ * every toast a session ever drew. Nothing is unregistered, because there is
+ * nowhere for a dead node to be left.
+ *
+ * The namespace is a parameter, and the default is this package's own. It is the
+ * one name a *consumer* owns rather than a session — a bubble is drawn minutes
+ * before any capture exists, so a name minted per session could never have been
+ * on it — and two products reading the same document must not share it: a bubble
+ * marked `data-s2md-ui` is dropped by nobody when the capture walking the page
+ * looks for `data-dotmd-wr-ui`, and the reader's own chrome re-enters the
+ * document it is reading. A consumer with a namespace of its own passes it here,
+ * the same object it will pass to the capture.
+ *
+ * Never removed while the element is on the page: the mark states what the paint
+ * *is*, for its whole life, not what a capture is doing to it right now.
+ */
+export function registerOwnUI<T extends Element>(
+  el: T,
+  namespace: CaptureNamespace = DEFAULT_NAMESPACE,
+): T {
+  el.setAttribute(namespace.ownUI, '');
+  return el;
+}
+
+/**
  * Puts the two names the converter reads back the way the converter spells them.
  *
  * The collision this whole module exists for happens on the **live page**, where

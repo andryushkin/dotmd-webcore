@@ -77,6 +77,17 @@ of a pair whose other end is in that sheet.
 - The prefix belongs to a consumer, the object to a capture. A consumer's own-UI
   mark goes on when it draws its bubble, minutes before any capture exists, so a
   name minted per session could never have been on it.
+- **`registerOwnUI(el, namespace)` is the write half of `dropOwnUI`**, and both
+  live here for that reason: a consumer holding one of them and the package the
+  other is a pair with a boundary between it. The register is a *mark*, never a
+  set of nodes — `cloneContents()` keeps no link back to the originals, so live
+  nodes could not be matched against a fragment at all, and a set would hold
+  every toast a session ever drew. A list of selectors is the arrangement this
+  replaces: it names the two elements somebody remembered, and the clipper
+  shipped `add to .md` at the end of every full-page capture until the elements
+  said so themselves. The namespace argument is the sharp part — a bubble
+  registered under one consumer's names is invisible to a capture walking
+  another's, and nothing fails; the paint simply arrives in the file.
 - `style` and `row` are **imported** from `htmltodotmd/snapshot`, never spelled
   again. `ROW_ATTR` was written out a second time in the content script under a
   comment saying the two sides could not disagree: its value crossed the boundary
@@ -271,6 +282,27 @@ The other half of this pair is under *Rows drawn side by side* in
   `&notin;` collapse to `¬in;` via the legacy `&not` name.
 - Truncate titles by grapheme (`Intl.Segmenter`), never `slice()`, which splits
   emoji sequences that then reach the front matter and the filename.
+- **`document.title` is the last candidate, not the first.** It is written for a
+  browser tab, so it carries the site name, a separator, a section and sometimes
+  an unread count — all of which reach the front matter and the download's file
+  name. `findPageTitle(doc)` asks what the page states about *itself* first, in
+  order of authority: `og:title` (published, visible in every share, therefore
+  the one sites keep correct), `twitter:title` (the same claim from a site that
+  filled in one of the two), a schema.org `headline` (the article's own, but
+  often the long or desk form), `meta[name=title]`, then the tab. First non-empty
+  wins, and a present-but-blank candidate is passed over — a template that
+  emitted nothing leaves the tag behind, and taking it as an answer names the
+  file after the site's bug. Every candidate goes through `normalizePageTitle`:
+  metadata is generated rather than typed, so it arrives doubly encoded, with a
+  newline, or with a no-break space no file name can hold. Malformed JSON-LD is
+  stepped over rather than thrown — a page's broken metadata is not a reason to
+  fail a capture. Declared limit: a `ld+json` top-level array or a `@graph` is
+  not walked.
+- **The file is split across the two entries by what it touches, not by
+  subject.** `findPageTitle` reads a document and is on the main entry;
+  `normalizePageTitle`, `decodeEntities` and `truncateGraphemes` touch no node
+  and stay on `/text`, which a service worker naming a download imports without
+  pulling a style snapshot in with it.
 - Entity behavior cannot be tested through the DOM — linkedom does not decode
   entities; tests compare against the reference table.
 
@@ -404,11 +436,30 @@ want "the article on this page"; neither should re-score the DOM alone.
   strip of *off-document* links with no prose of its own (the language switcher
   beside the title) is furniture even without a landmark tag — but a parent that
   also holds the `h1` is not itself that strip, or the title goes with it.
-- **Visibility is an injected predicate.** Defaults to "everything is visible".
-  Under linkedom and happy-dom a `display: none` node still contributes text, so
-  a default that tried to read the cascade here would claim a certainty the
-  harness cannot give. A real browser injects the answer from `getComputedStyle`,
-  the same shape `computedStyleIn(view)` already uses for the snapshot.
+- **Visibility is a predicate, and the default is `isElementVisible`**
+  (`visibility.ts`) — a live layout engine asked through the element's own
+  document, never a global. It answers `true` for everything where there is no
+  engine, which is what a harness that lays nothing out can honestly be told, and
+  is byte for byte the stub the option used to default to. That stub was the
+  whole predicate before, and it lied on the page it was written for: a second
+  extension's settings sheet, `display: none` at the top with every descendant
+  computing its own `display: block`, scored 2707 characters and became the
+  article on a page whose prose was 33 characters long.
+- `checkVisibility({ visibilityProperty: true })` is the whole ancestor chain in
+  one call, which is what makes it cheap enough to run per element. The other two
+  flags are deliberately off: `opacityProperty` drops an article that fades in on
+  scroll, `contentVisibilityAuto` drops the offscreen half of a page that renders
+  itself lazily. Note the asymmetry with the snapshot, which *does* stop at
+  `content-visibility: hidden` — same page, two consumers, two questions.
+- **Two answers of "not rendered" are about a box, not about text**, and both are
+  reached only after `checkVisibility()` has already said no. A `display: contents`
+  wrapper has no box while every paragraph under it is on screen, and the scorer
+  never descends past an element it called invisible. A folded `<details>` is not
+  drawn, but a reading mode opens every disclosure on its clone (`openDetails`),
+  so the text ships either way and scoring it zero refuses an FAQ as too thin.
+  Both delegate upward rather than answering `true`: either one inside a hidden
+  panel is still hidden. A consumer whose policy is the opposite — the clipper
+  keeps a collapsed `<details>` to its `<summary>` — passes its own predicate.
 - **Refusal hands back numbers, not a product policy.** Soft floor on visible
   text (`DEFAULT_MIN_TEXT_LENGTH`, overridable; `0` never refuses on length). The
   metrics always accompany a refusal so a consumer can set its own threshold and

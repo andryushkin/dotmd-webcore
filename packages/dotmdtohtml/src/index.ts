@@ -33,6 +33,23 @@ export {
 // that needs the document, and lives on `RenderResult.headings`.
 export { headingSlug } from './heading-slug.js';
 
+// The repair for the ids a sanitizer took off a mounted document. Deliberately
+// not inside `mount()`: the sanitizer is the consumer's, and putting an
+// attribute back is overruling it.
+export { reassertHeadingIds } from './heading-ids.js';
+
+// The links of a rendered note: the join from the live page's fragment ids to
+// the ids this package printed, and the markup that keeps a click out of
+// whatever is showing the note. Behaviour arrives as a callback; nothing here
+// navigates.
+export {
+  buildHeadingFragmentMap,
+  findById,
+  wireDocumentLinks,
+  type HeadingFragmentTarget,
+  type WireDocumentLinksOptions,
+} from './links.js';
+
 export {
   hydrateMath,
   type MathEntry,

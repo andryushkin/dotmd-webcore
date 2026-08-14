@@ -1,8 +1,10 @@
 import { describe, test, expect } from 'bun:test';
+import { Window } from 'happy-dom';
 import { Marked } from 'marked';
 import {
   createMarkdownRenderer,
   headingSlug,
+  reassertHeadingIds,
   type KatexEngine,
   type MarkdownRenderer,
   type RendererOptions,
@@ -273,5 +275,102 @@ describe('headingIds on', () => {
     expect(headings.map((h) => h.id)).toEqual(['quoted', 'outer']);
     expect(html).toContain('<h2 id="quoted">');
     expect(html).toContain('<h1 id="outer">');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reassertHeadingIds — the repair for what the sanitizer took off
+// ---------------------------------------------------------------------------
+
+/**
+ * DOMPurify's clobber filter, standing in for DOMPurify itself.
+ *
+ * The package has no sanitizer of its own to test against — the consumer's
+ * arrives as an argument — so what is reproduced here is the *rule*: default
+ * DOMPurify keeps `id` in general and removes the handful of names that would
+ * clobber a property of `document` or of a form. Those names are the ordinary
+ * vocabulary of headings, which is what makes the defect a common one rather
+ * than an exotic one. Measured in Chrome against the real library; a stand-in is
+ * all bun can hold.
+ */
+const CLOBBER_NAMES = ['title', 'body', 'length', 'name'];
+const stripClobberIds = (html: string): string =>
+  html.replace(/ id="([^"]*)"/g, (match, id: string) =>
+    CLOBBER_NAMES.includes(id) ? '' : match,
+  );
+
+function container(): Element {
+  const win = new Window();
+  const div = win.document.createElement('div');
+  win.document.body.appendChild(div);
+  return div as unknown as Element;
+}
+
+describe('reassertHeadingIds', () => {
+  // The defect, whole: a captured page opens `# Title`, the renderer writes
+  // `id="title"`, DOMPurify takes it off, and the list still names it — so every
+  // table of contents entry for the first heading scrolls to nothing, with
+  // nothing anywhere reporting a failure.
+  test('a clobber name the sanitizer removed is put back', () => {
+    const el = container();
+    const result = renderer({ headingIds: true, sanitize: stripClobberIds })
+      .renderInto(el, '# Title\n\nbody\n');
+
+    expect(result.headings[0]!.id).toBe('title');
+    expect(el.querySelector('h1')!.getAttribute('id')).toBeNull();
+
+    reassertHeadingIds(el, result.headings);
+    expect(el.querySelector('h1')!.getAttribute('id')).toBe('title');
+  });
+
+  test('every clobber name in one document, and the survivors left alone', () => {
+    const el = container();
+    const md = '# Title\n\n## Body\n\n### Kept\n\n#### Length\n';
+    const result = renderer({ headingIds: true, sanitize: stripClobberIds })
+      .renderInto(el, md);
+    expect(result.headings.map((h) => h.id)).toEqual(['title', 'body', 'kept', 'length']);
+    // `kept` is not a clobber name and rode through; the other three did not.
+    expect(el.querySelector('h3')!.getAttribute('id')).toBe('kept');
+
+    reassertHeadingIds(el, result.headings);
+    expect(el.querySelector('h1')!.getAttribute('id')).toBe('title');
+    expect(el.querySelector('h2')!.getAttribute('id')).toBe('body');
+    expect(el.querySelector('h3')!.getAttribute('id')).toBe('kept');
+    expect(el.querySelector('h4')!.getAttribute('id')).toBe('length');
+  });
+
+  test('a sanitizer that keeps ids leaves the document byte for byte as it was', () => {
+    const el = container();
+    const result = renderer({ headingIds: true }).renderInto(el, '# Alpha\n\n## Beta\n');
+    const before = el.innerHTML;
+    reassertHeadingIds(el, result.headings);
+    expect(el.innerHTML).toBe(before);
+  });
+
+  test('with the option off there is no list, and nothing is invented', () => {
+    const el = container();
+    const result = renderer().renderInto(el, '# Alpha\n\n## Beta\n');
+    expect(result.headings).toEqual([]);
+    reassertHeadingIds(el, result.headings);
+    expect(el.querySelector('h1')!.hasAttribute('id')).toBe(false);
+  });
+
+  // A tag the list does not describe is skipped rather than stamped: the two
+  // would only disagree where the container holds a heading this render did not
+  // write — markup a note's author typed, or a product's own chrome — and the
+  // wrong id on it is worse than no id at all.
+  test('a heading of another level is stepped over, not renamed', () => {
+    const el = container();
+    const result = renderer({ headingIds: true, sanitize: stripClobberIds })
+      .renderInto(el, '# Title\n\n## Body\n');
+    // A product injects its own heading between the two.
+    const injected = el.ownerDocument.createElement('h3');
+    injected.textContent = 'Product chrome';
+    el.insertBefore(injected, el.querySelector('h2'));
+
+    reassertHeadingIds(el, result.headings);
+    expect(el.querySelector('h1')!.getAttribute('id')).toBe('title');
+    expect(injected.hasAttribute('id')).toBe(false);
+    expect(el.querySelector('h2')!.getAttribute('id')).toBe('body');
   });
 });

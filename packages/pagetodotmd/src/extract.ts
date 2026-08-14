@@ -17,6 +17,7 @@
  * still passed every threshold. `highlightsToMd` already walks a list with
  * `selectNodeContents` on each element, so `[h1, article]` arrives intact.
  */
+import { isElementVisible } from './visibility.js';
 
 /** Numbers the scorer settled on, for a consumer that wants its own threshold. */
 export interface ArticleMetrics {
@@ -71,11 +72,14 @@ export interface FindArticleOptions {
   /**
    * Whether an element is visible enough that its text should count.
    *
-   * Defaults to "everything is visible". Under linkedom and happy-dom a node
-   * with `display: none` still contributes text, so a default that tried to
-   * read the cascade here would claim a certainty the harness cannot give. A
-   * real browser injects the answer — typically from `getComputedStyle` — the
-   * same way the snapshot already does.
+   * Defaults to {@link isElementVisible}, which asks the element's own document
+   * for a layout engine and answers `true` for everything when there is none.
+   * The default used to be "everything is visible" outright, and it lied on the
+   * one page that matters: a hidden settings panel scored 2707 characters of
+   * font names and became the article. A harness with no cascade still gets the
+   * old behaviour, because that is the only honest answer it can be given; a
+   * consumer with a policy of its own — one that folds `<details>` rather than
+   * opening them, say — passes its own predicate here.
    */
   isVisible?: (el: Element) => boolean;
   /**
@@ -140,7 +144,7 @@ export function findArticle(
   doc: Document,
   options: FindArticleOptions = {},
 ): ArticleResult {
-  const isVisible = options.isVisible ?? (() => true);
+  const isVisible = options.isVisible ?? isElementVisible;
   const minTextLength = options.minTextLength ?? DEFAULT_MIN_TEXT_LENGTH;
   const body = doc.body;
   const empty: ArticleMetrics = {

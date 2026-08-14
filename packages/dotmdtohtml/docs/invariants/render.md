@@ -283,7 +283,70 @@ product's, and none of it is here.
   LaTeX without the dollars — never the `data-katex` placeholder that carries it
   through the sanitizer. That placeholder is empty, and letting it into the id
   or the list is a defect a reader sees.
-- **Ids are written before `sanitize`, and must survive it.** Default DOMPurify
-  keeps `id`. A consumer that configures the sanitizer to strip it gets a list
-  naming anchors the markup no longer holds; allow `id` through, or leave the
-  option off.
+- **Ids are written before `sanitize`, and mostly survive it.** Default DOMPurify
+  keeps `id` in general — and removes, with no configuration involved, the names
+  that would clobber a property of `document` or of a form: `title`, `body`,
+  `length`, `name`. That is the ordinary vocabulary of headings, so the very
+  first `# Title` of a captured page is the case that breaks: the tag loses its
+  anchor, the list still names it, and the entry in the table of contents scrolls
+  to nothing while nothing anywhere reports a failure. A consumer that strips
+  `id` wholesale gets the same shape across the whole document.
+- **`reassertHeadingIds(container, headings)` is the repair, and it is not inside
+  `mount()`.** It writes the list's ids back onto the mounted tags in document
+  order, inventing nothing and re-slugging nothing — the list is the whole
+  contract, and a second source of ids on this side is exactly the drift one walk
+  of one token tree exists to prevent. A tag whose level does not match the entry
+  in hand is stepped over rather than stamped: the two disagree only where the
+  container holds a heading this render did not write, and the wrong id on one of
+  those is worse than none. Out of `mount()` because it puts back an attribute
+  the *consumer's* sanitizer removed, and that sanitizer arrives here as an
+  argument — the package borrowed it and does not get to overrule it unasked.
+
+## Links
+
+`links.ts`. The other half of the heading-id contract, and the only place the two
+packages' answers about one document are put side by side.
+
+- **The join is by heading text, and this side does it.** `pagetodotmd` reports
+  an original `id`, a tag and the heading's *text*, and deliberately no slug — a
+  second slug implementation is the drift the repository's "keep in sync" list
+  exists to prevent, and `headingSlug` is here. Matching consumes the headings
+  list in document order, so two sections both titled "Intro" take `intro` and
+  `intro-1` rather than both claiming the first. The suffix is read off
+  `RenderResult.headings` and never invented on this side. Plain-text equality is
+  tried first and the slug is the fallback: the halves are produced by different
+  packages reading different trees — a live DOM and a token stream — so
+  whitespace drift is ordinary rather than exceptional.
+- **`href.startsWith('#')` is never the test.** By the time markup is rendered
+  `resolveUrl` in the converter has run every address through
+  `new URL(url, baseUrl)`, so an internal link arrives absolute; and a raw `#id`
+  would not have been trustworthy anyway, because under a `<base>` it resolves
+  into another document. The key is `origin + pathname + search` with the hash
+  dropped from both sides — the same key `collectFragmentIds` uses, and it has to
+  stay the same one. Nothing is decoded and no trailing slash is folded.
+- **A target the join cannot reach is a link that leaves.** A paragraph, a
+  figure, a footnote item: nothing in the rendered note carries that id, and
+  nothing can be made to. Scrolling to nothing reads as a broken control and
+  tells a reader the note is damaged, so those keep their original address and
+  open beside the note, exactly like an external link.
+- **`FragmentTarget` is not imported — its shape is declared here.** This package
+  depends on nothing, which is the same rule that keeps `pagetodotmd` from
+  depending on this one, and a package installed to read a *type* is a dependency
+  in a consumer's bundle all the same. Only the two fields the join reads are
+  named, so anything added over there still fits. It is a pair regardless: rename
+  `headingText` there and an optional property goes on satisfying this shape while
+  every internal link quietly stops joining.
+- **Markup is this package's; behaviour is the product's.** `target="_blank"` and
+  `rel="noopener noreferrer"` are written onto the document, because a rendered
+  note is always shown *inside* something — a preview panel, a modal overlay —
+  and a link that navigates in place carries that away with it, which the
+  clipper's preview shipped. Nothing here calls `window.open`, assigns a location
+  or routes: what activating an internal link does arrives as `onScrollTo`, since
+  an overlay scrolls its shell, a panel scrolls a pane and a page scrolls itself.
+- **`findById` asks whether the object answers, never what class it is.**
+  `getElementById` is a `Document` method and a rendered note is often inside a
+  shadow root where it does not reach, so the walk is index, then the root
+  itself, then `[id]`. No `instanceof Element` in the middle step: `Element` is a
+  global, this package may not read one, and there are environments where it is
+  not defined. One consumer held three copies of this walk, each with a different
+  idea of the first two steps.

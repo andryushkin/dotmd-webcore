@@ -5,11 +5,12 @@
  * whose visible text includes the strings listed as must-have, and does not
  * include the strings listed as must-not — and reports a hit rate over the set.
  *
- * What it cannot prove: visible-text scoring against a real cascade. Under
- * linkedom and happy-dom a node with `display: none` still contributes text, so
- * the harness always passes `isVisible: () => true` (the default). The production
- * path injects a predicate from `getComputedStyle`, the same seam
- * `computedStyleIn(view)` already uses for the snapshot.
+ * What it cannot prove: visible-text scoring against a real cascade. The default
+ * predicate is `isElementVisible`, which asks the element's own document for a
+ * layout engine; happy-dom answers enough of one to hold it to its job (see
+ * `visibility.test.ts`) but lays nothing out, so every fixture here is written
+ * with all of its text on screen and the corpus says nothing about hiding.
+ * Chrome is the last word.
  */
 import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
