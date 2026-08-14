@@ -415,11 +415,30 @@ want "the article on this page"; neither should re-score the DOM alone.
   strip of *off-document* links with no prose of its own (the language switcher
   beside the title) is furniture even without a landmark tag — but a parent that
   also holds the `h1` is not itself that strip, or the title goes with it.
-- **Visibility is an injected predicate.** Defaults to "everything is visible".
-  Under linkedom and happy-dom a `display: none` node still contributes text, so
-  a default that tried to read the cascade here would claim a certainty the
-  harness cannot give. A real browser injects the answer from `getComputedStyle`,
-  the same shape `computedStyleIn(view)` already uses for the snapshot.
+- **Visibility is a predicate, and the default is `isElementVisible`**
+  (`visibility.ts`) — a live layout engine asked through the element's own
+  document, never a global. It answers `true` for everything where there is no
+  engine, which is what a harness that lays nothing out can honestly be told, and
+  is byte for byte the stub the option used to default to. That stub was the
+  whole predicate before, and it lied on the page it was written for: a second
+  extension's settings sheet, `display: none` at the top with every descendant
+  computing its own `display: block`, scored 2707 characters and became the
+  article on a page whose prose was 33 characters long.
+- `checkVisibility({ visibilityProperty: true })` is the whole ancestor chain in
+  one call, which is what makes it cheap enough to run per element. The other two
+  flags are deliberately off: `opacityProperty` drops an article that fades in on
+  scroll, `contentVisibilityAuto` drops the offscreen half of a page that renders
+  itself lazily. Note the asymmetry with the snapshot, which *does* stop at
+  `content-visibility: hidden` — same page, two consumers, two questions.
+- **Two answers of "not rendered" are about a box, not about text**, and both are
+  reached only after `checkVisibility()` has already said no. A `display: contents`
+  wrapper has no box while every paragraph under it is on screen, and the scorer
+  never descends past an element it called invisible. A folded `<details>` is not
+  drawn, but a reading mode opens every disclosure on its clone (`openDetails`),
+  so the text ships either way and scoring it zero refuses an FAQ as too thin.
+  Both delegate upward rather than answering `true`: either one inside a hidden
+  panel is still hidden. A consumer whose policy is the opposite — the clipper
+  keeps a collapsed `<details>` to its `<summary>` — passes its own predicate.
 - **Refusal hands back numbers, not a product policy.** Soft floor on visible
   text (`DEFAULT_MIN_TEXT_LENGTH`, overridable; `0` never refuses on length). The
   metrics always accompany a refusal so a consumer can set its own threshold and

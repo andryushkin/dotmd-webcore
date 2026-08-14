@@ -97,3 +97,8 @@ export {
   type CollectFragmentIdsOptions,
   type FragmentTarget,
 } from './fragment-ids.js';
+
+// What a reader was shown, asked of a live layout engine — `findArticle`'s own
+// default, exported because a consumer that scores anything else on a page
+// should ask the same question the same way rather than write a second answer.
+export { isElementVisible } from './visibility.js';
