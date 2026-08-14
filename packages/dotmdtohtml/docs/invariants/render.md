@@ -283,7 +283,21 @@ product's, and none of it is here.
   LaTeX without the dollars — never the `data-katex` placeholder that carries it
   through the sanitizer. That placeholder is empty, and letting it into the id
   or the list is a defect a reader sees.
-- **Ids are written before `sanitize`, and must survive it.** Default DOMPurify
-  keeps `id`. A consumer that configures the sanitizer to strip it gets a list
-  naming anchors the markup no longer holds; allow `id` through, or leave the
-  option off.
+- **Ids are written before `sanitize`, and mostly survive it.** Default DOMPurify
+  keeps `id` in general — and removes, with no configuration involved, the names
+  that would clobber a property of `document` or of a form: `title`, `body`,
+  `length`, `name`. That is the ordinary vocabulary of headings, so the very
+  first `# Title` of a captured page is the case that breaks: the tag loses its
+  anchor, the list still names it, and the entry in the table of contents scrolls
+  to nothing while nothing anywhere reports a failure. A consumer that strips
+  `id` wholesale gets the same shape across the whole document.
+- **`reassertHeadingIds(container, headings)` is the repair, and it is not inside
+  `mount()`.** It writes the list's ids back onto the mounted tags in document
+  order, inventing nothing and re-slugging nothing — the list is the whole
+  contract, and a second source of ids on this side is exactly the drift one walk
+  of one token tree exists to prevent. A tag whose level does not match the entry
+  in hand is stepped over rather than stamped: the two disagree only where the
+  container holds a heading this render did not write, and the wrong id on one of
+  those is worse than none. Out of `mount()` because it puts back an attribute
+  the *consumer's* sanitizer removed, and that sanitizer arrives here as an
+  argument — the package borrowed it and does not get to overrule it unasked.

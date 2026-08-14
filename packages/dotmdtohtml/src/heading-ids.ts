@@ -138,3 +138,52 @@ export function collectHeadings(tokens: readonly WalkToken[], run: MathRun): Ren
   walk(tokens);
   return headings;
 }
+
+/**
+ * Writes each list entry's id back onto the matching heading tag of a mounted
+ * document — the repair for the ids a sanitizer took off.
+ *
+ * `RenderResult.headings` and the markup are built from one walk of one token
+ * tree, so they cannot disagree here; what can disagree is the markup *after*
+ * the sanitizer. Default DOMPurify keeps `id` in general and strips the handful
+ * of names that clobber document and form properties — `title`, `body`,
+ * `length`, `name` — which is exactly the vocabulary of ordinary headings: the
+ * first `# Title` of a captured page produces `id="title"` and loses it, the
+ * list still names it, and every table of contents built from that list scrolls
+ * to nothing. Nothing fails; a control silently stops working.
+ *
+ * Not part of `mount()`, and that is the boundary rather than an omission. This
+ * puts back an attribute the consumer's own sanitizer decided to remove, and
+ * the sanitizer arrives here as an argument — the package borrowed it and does
+ * not get to overrule it. A consumer that wants the anchors calls this after
+ * mounting; one that strips ids on purpose simply does not.
+ *
+ * Invents nothing. Ids are never re-slugged here and no heading is given one it
+ * did not already have in the list: the list is the whole contract, and a second
+ * source of ids on this side is the drift the single walk exists to prevent. A
+ * tag whose level does not match the entry in hand is skipped rather than
+ * stamped — a mismatch means the walk and the tag list are describing different
+ * documents (markup a note's author typed, a product's own heading injected into
+ * the container), and writing the wrong id onto it is worse than leaving it bare.
+ */
+export function reassertHeadingIds(
+  container: Element,
+  headings: readonly RenderedHeading[],
+): void {
+  if (headings.length === 0) return;
+  // `Array.from` rather than a `for…of` over the live list: a `NodeList` is only
+  // iterable under a DOM lib newer than the one a consumer of this package may
+  // be compiling against, and this file is type-checked from three tsconfigs.
+  const nodes = Array.from(container.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+  let i = 0;
+  for (const node of nodes) {
+    if (i >= headings.length) break;
+    const heading = headings[i]!;
+    const level = Number(node.tagName.charAt(1));
+    if (level !== heading.level) continue;
+    if (node.getAttribute('id') !== heading.id) {
+      node.setAttribute('id', heading.id);
+    }
+    i += 1;
+  }
+}
