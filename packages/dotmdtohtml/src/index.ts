@@ -38,6 +38,18 @@ export { headingSlug } from './heading-slug.js';
 // attribute back is overruling it.
 export { reassertHeadingIds } from './heading-ids.js';
 
+// The links of a rendered note: the join from the live page's fragment ids to
+// the ids this package printed, and the markup that keeps a click out of
+// whatever is showing the note. Behaviour arrives as a callback; nothing here
+// navigates.
+export {
+  buildHeadingFragmentMap,
+  findById,
+  wireDocumentLinks,
+  type HeadingFragmentTarget,
+  type WireDocumentLinksOptions,
+} from './links.js';
+
 export {
   hydrateMath,
   type MathEntry,

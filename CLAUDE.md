@@ -107,6 +107,17 @@ exactly why it can drift silently.
   on every `role="heading"` is read there as an answer. Both sheets say which
   rules are halves of a pair, and the whole vocabulary is declared once, under the
   `htmltodotmd/snapshot` subpath.
+- **`FragmentTarget` in `pagetodotmd` ⇄ `HeadingFragmentTarget` in
+  `dotmdtohtml`.** The one shape that crosses between the two packages that do
+  *not* depend on each other, and it crosses as a value at runtime rather than as
+  an import: one side reads a live page's internal links, the other joins them to
+  the ids it printed, and a consumer holding both hands the array over. Declared
+  twice on purpose — `dotmdtohtml` depends on nothing, and a package installed to
+  read a type is a dependency in a bundle all the same — with the reading side
+  naming only `id` and `headingText`, so anything added over there still fits.
+  What does not fit is a *rename*: `headingText` is optional, so a renamed field
+  goes on satisfying the shape while every internal link quietly stops joining.
+  Same reason `collectFragmentIds` computes no slug: `headingSlug` has one home.
 - **A name crossing between the packages ⇄ `pagetodotmd/src/engine.ts` ⇄
   `BOUNDARY` in its `tsup.config.ts`.** One file lists what crosses, one map turns
   those paths into package specifiers when publishing, and
