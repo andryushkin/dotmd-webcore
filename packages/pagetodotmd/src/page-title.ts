@@ -97,9 +97,10 @@ export function normalizePageTitle(raw: string): string {
  * may be reading a frame, and nothing here may reach for a global.
  *
  * Declared limit: a `ld+json` block whose top level is an array, or a
- * `@graph`, is not walked. Only the first block that is an object with a
- * `headline` is read; anything malformed is stepped over rather than thrown,
- * because a page's broken metadata is not a reason to fail a capture.
+ * `@graph`, is not walked. Only the first block whose `headline` is non-blank
+ * text is read; anything malformed — a `headline` that is a number or a
+ * boolean included — is stepped over rather than thrown, because a page's
+ * broken metadata is not a reason to fail a capture.
  */
 export function findPageTitle(doc: Document): string {
   const meta = (attribute: string, value: string): string =>
@@ -117,7 +118,7 @@ export function findPageTitle(doc: Document): string {
   return normalizePageTitle(raw);
 }
 
-/** `headline` from the first JSON-LD block that has one. */
+/** `headline` from the first JSON-LD block that carries one as non-blank text. */
 function schemaHeadline(doc: Document): string {
   for (const el of Array.from(doc.querySelectorAll('script[type="application/ld+json"]'))) {
     let data: unknown;
@@ -130,8 +131,16 @@ function schemaHeadline(doc: Document): string {
     }
     if (typeof data !== 'object' || data === null) continue;
     const headline = (data as { headline?: unknown }).headline;
-    if (headline === undefined || headline === null || headline === '') continue;
-    return String(headline).trim();
+    // Text or nothing. schema.org's headline is Text, but the wild also ships
+    // `{"headline": 0}` \u2014 and `String(0)` would make "0" the note's title and
+    // its file name while the next candidate held the real one. A non-string
+    // steps to the next block like every other malformed shape here; so does
+    // text that is blank once trimmed, which used to end the walk early with
+    // nothing to show for it.
+    if (typeof headline !== 'string') continue;
+    const text = headline.trim();
+    if (text === '') continue;
+    return text;
   }
   return '';
 }
