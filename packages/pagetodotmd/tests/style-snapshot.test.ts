@@ -17,6 +17,7 @@ import { describe, it, expect } from 'bun:test';
 import { Window } from 'happy-dom';
 import { toMarkdown } from '../src/engine.js';
 import { ROW_ATTR, SNAPSHOT_ATTR } from '../src/engine.js';
+import { openDetails } from '../src/clone-edits.js';
 import { computedStyleIn, snapshotScope, snapshotStyles, type ComputedStyleOf } from '../src/style-snapshot.js';
 
 type Declarations = Record<string, string>;
@@ -54,6 +55,9 @@ const INITIAL: Declarations = {
   // background cannot be read off one element alone: the property does not
   // inherit, so this is the answer over almost the whole of a page.
   'background-color': 'rgba(0, 0, 0, 0)',
+  // Every browser answers this one too, and its `hidden` is the third way a page
+  // states that nothing inside a box is drawn.
+  'content-visibility': 'visible',
 };
 
 // The part of the UA stylesheet that touches anything read here.
@@ -63,7 +67,10 @@ const UA: Record<string, Declarations> = {
   header: BLOCK, footer: BLOCK, nav: BLOCK, main: BLOCK, aside: BLOCK, figure: BLOCK,
   figcaption: BLOCK, blockquote: { ...BLOCK }, ul: BLOCK, ol: BLOCK, dl: BLOCK,
   dt: BLOCK, dd: BLOCK, pre: BLOCK, hr: BLOCK, form: BLOCK,
+  details: BLOCK,
   li: { display: 'list-item' },
+  // A marker box of its own, and the tag the fold leaves on the screen.
+  summary: { display: 'list-item' },
   table: { display: 'table' },
   thead: { display: 'table-header-group' },
   tbody: { display: 'table-row-group' },
@@ -470,6 +477,60 @@ describe('text nobody could see', () => {
       TAILWIND,
     );
     expect(written).toEqual({ div: 'display:none' });
+  });
+
+  // The one hiding every property the core reads calls visible: the box computes
+  // `display:block`, `visibility:visible` and `opacity:1`, and nothing inside it
+  // is laid out or painted. Stated in a class, which is why only this side can
+  // see it at all.
+  it('content-visibility:hidden is one mark, and nothing under it is asked', () => {
+    const rules = {
+      ...TAILWIND,
+      'cv-hidden': { 'content-visibility': 'hidden' },
+      'cv-auto': { 'content-visibility': 'auto' },
+    };
+    expect(snapshot('<div class="cv-hidden"><p><span class="font-bold">x</span></p></div>', rules)
+      .written).toEqual({ div: 'content-visibility:hidden' });
+    // `auto` is the browser's own performance hint: it computes `auto` on and off
+    // the screen alike, and the box is drawn in full the moment it nears the
+    // viewport. Read as hiding, it would delete the whole of a long article.
+    expect(snapshot('<div class="cv-auto"><p>x</p></div>', rules).written).toEqual({});
+  });
+
+  it('the text under a skipped box does not reach the file, and auto keeps it', () => {
+    const rules = {
+      ...TAILWIND,
+      'cv-hidden': { 'content-visibility': 'hidden' },
+      'cv-auto': { 'content-visibility': 'auto' },
+    };
+    const skipped = convert('<p>before</p><div class="cv-hidden"><p>SKIPPED</p></div><p>after</p>', rules);
+    expect(skipped.before).toContain('SKIPPED');
+    expect(skipped.after).not.toContain('SKIPPED');
+    expect(skipped.after).toContain('before');
+    expect(skipped.after).toContain('after');
+    expect(convert('<div class="cv-auto"><p>KEPT</p></div>', rules).after).toContain('KEPT');
+  });
+
+  // Chrome states a folded `<details>` on `::details-content`, which is a
+  // pseudo-element: no element under the `<details>` computes anything but
+  // `content-visibility: visible`, so the mark cannot reach a folded body — and a
+  // consumer that opens every `<details>` on its clone still keeps every word.
+  // Measured in Chrome 151; the stylesheet here states what was measured.
+  it('a folded <details> is left to the markup, and openDetails still works', () => {
+    const rules = { ...TAILWIND, 'cv-hidden': { 'content-visibility': 'hidden' } };
+    const html = '<details><summary>Sum</summary><p>BODY</p></details>';
+    // Snapshotted and converted as the clipper does: the fold stands.
+    const folded = page(html);
+    snapshotStyles([folded.body], styleEngine(rules));
+    expect(marks(folded)).toEqual({});
+    expect(toMarkdown(folded.body).trim()).toBe('Sum');
+    // And as a reading mode does, which is the direction that would have cost
+    // every folded section on a page. A document of its own: conversion edits
+    // the tree it is handed.
+    const opened = page(html);
+    snapshotStyles([opened.body], styleEngine(rules));
+    openDetails(opened.body);
+    expect(toMarkdown(opened.body).trim()).toContain('BODY');
   });
 
   // The expensive mistake, guarded from both sides: a section waiting to be

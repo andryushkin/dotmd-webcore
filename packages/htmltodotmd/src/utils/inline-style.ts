@@ -518,10 +518,37 @@ export function revealsFrom(read: StyleReader, hiddenBy: 'opacity' | 'visibility
   return shorthand !== undefined && transitionReveals(shorthand, revealed);
 }
 
+/**
+ * Whether this style skips the element's contents — `display:none` for
+ * everything inside the box, with the box itself still drawn.
+ *
+ * `content-visibility: hidden` lays out and paints nothing under the element:
+ * no child box, no text run, and no descendant can take it back — a
+ * `content-visibility: visible` inside one is still on nobody's screen
+ * (measured in Chrome 151: the container draws 0px high and its `innerText` is
+ * empty). That is the `display:none` half of the family rather than the
+ * `visibility:hidden` half, which is why it is answered here and why it holds
+ * nothing back the way an `opacity:0` does: the value that means "maybe later"
+ * is `auto`, the browser's own performance hint, and a box carrying it is drawn
+ * in full the moment it comes near the viewport.
+ *
+ * The two shapes Chrome writes it for itself are both answered elsewhere and
+ * neither reaches this: a closed `<details>` carries the value on
+ * `::details-content`, a pseudo-element no `getComputedStyle` of an *element*
+ * reports, and `hidden="until-found"` is removed by the attribute before any
+ * style is read (`hidingOf` in `src/core/sanitizer.ts`). What is left is a page
+ * hiding a subtree of its own — a panel behind an inactive tab, a slide off the
+ * carousel — whose text used to walk into the file as prose nobody was shown.
+ */
+export function contentSkippedFrom(read: StyleReader): boolean {
+  return read('content-visibility') === 'hidden';
+}
+
 /** Whether this style takes the element out of the render, for good. */
 export function removedFrom(read: StyleReader): boolean {
   const display = read('display');
   if (display !== undefined && firstToken(display) === 'none') return true;
+  if (contentSkippedFrom(read)) return true;
   const opacity = read('opacity');
   // Fully transparent, in either spelling: `0` and `0%`. A value merely close to
   // zero is left alone — the mistake that costs is deleting text a reader saw,
@@ -682,7 +709,9 @@ export function visuallyHiddenFrom(read: StyleReader): boolean {
  * `visibility` is deliberately absent: a descendant can take that one back, so
  * the two sides state it in their own terms rather than by copying a value.
  */
-export const HIDING_PROPERTIES: readonly string[] = ['display', 'opacity', ...CLIPPED_PROPERTIES];
+export const HIDING_PROPERTIES: readonly string[] = [
+  'display', 'content-visibility', 'opacity', ...CLIPPED_PROPERTIES,
+];
 
 /**
  * Which edge this style lines its text up against, in the terms GFM has.

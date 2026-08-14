@@ -322,6 +322,23 @@ threshold sits where no layout lands by accident.
   hiding no style declares: Chrome draws the body away behind `::details-content`, so the markup and
   a computed style taken off live nodes both describe a visible box. MDN folds its whole sidebar
   that way, and a 2,655-word article arrived carrying 500 words the reader never saw.
+- `content-visibility: hidden` is `display: none` for everything *inside* the box, and is read as a
+  removal for that reason rather than as the third `visibility`: nothing under it is laid out or
+  painted, and a descendant declaring `content-visibility: visible` does not bring it back — measured
+  in Chrome 151, where such a container draws 0px high and answers `''` to `innerText`. It holds
+  nothing back the way an `opacity: 0` does, because the value meaning "not yet" is a different one:
+  `auto` is the browser's own performance hint, computes as `auto` on and off the screen, and is
+  drawn in full the moment the box nears the viewport, so only the literal `hidden` is read. Almost
+  always a class, so it arrives through the snapshot; a library caller reading a page's own `style`
+  gets the same verdict from the same reader.
+  What it does **not** answer is either of the two shapes Chrome writes the value for itself, and
+  both matter more than the case it repairs. A closed `<details>` carries it on `::details-content`,
+  a pseudo-element no `getComputedStyle` of an *element* reports — so the bullet above is still the
+  whole of that answer, and a reading-mode consumer opening every `<details>` on its clone
+  (`pagetodotmd`'s `openDetails`) loses nothing. `hidden="until-found"` is answered by the attribute
+  before any style is read, which `hidingOf` in `src/core/sanitizer.ts` has always done. What is left
+  is a page hiding a subtree of its own — a panel behind an inactive tab, a slide off the carousel —
+  and its text used to walk into the file as prose nobody was shown.
 - `hidingVerdict()` also drops what is drawn where nobody can look: a zero `clip` rect, `clip-path:
   inset(≥50%)`, a four-digit negative `text-indent` or offset, a 1×1 box that clips. That is how
   `.sr-only` and `.visually-hidden` are written, and the text under them was meant for a screen

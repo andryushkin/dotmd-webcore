@@ -345,6 +345,53 @@ describe('hidden by style', () => {
   });
 });
 
+// The hiding that skips an element's contents rather than the element: the box
+// is drawn, and no child box, text run or descendant declaration inside it is.
+// Chrome writes the value for a closed `<details>` and for `hidden="until-found"`
+// itself, and both of those are answered elsewhere — what is left is a page
+// hiding a subtree of its own, whose text used to reach the file as prose nobody
+// was shown.
+describe('content-visibility: the contents are skipped', () => {
+  it.each([
+    ["stated in the page's own style", 'style'],
+    ['recorded off a class by a snapshot', 'data-s2md-style'],
+  ])('%s drops what is inside', (_name, attribute) => {
+    expect(md(`<span ${attribute}="content-visibility:hidden">HIDDEN</span>ok`)).toBe('ok');
+  });
+
+  // The value that means "not drawn yet" rather than "not drawn": the browser
+  // manages that one, it computes `auto` whether the box is on the screen or far
+  // below it, and the contents are laid out in full the moment it nears the
+  // viewport. Measured in Chrome 151, both sides of the scroll.
+  it.each([
+    ['auto', 'content-visibility:auto'],
+    ['visible', 'content-visibility:visible'],
+  ])('%s keeps it', (_name, style) => {
+    expect(md(`<span style="${style}">SHOWN</span> ok`)).toBe('SHOWN ok');
+  });
+
+  // Not `visibility`, which a child may declare back: nothing under a skipped
+  // box is laid out at all, so the deeper declaration is on nobody's screen.
+  it('a descendant claiming visible does not bring the subtree back', () => {
+    expect(
+      md(
+        '<span style="content-visibility:hidden">HIDDEN'
+          + '<span style="content-visibility:visible">ALSO HIDDEN</span></span>ok',
+      ),
+    ).toBe('ok');
+  });
+
+  // The regression this must never become. Chrome states a folded `<details>`
+  // through `::details-content`, a pseudo-element no computed style of an element
+  // reports — so the fold stays the markup's answer, and a consumer that opens
+  // every `<details>` on its clone keeps every word of the body.
+  it('a folded <details> is untouched by it, opened or not', () => {
+    expect(toMarkdown('<details><summary>Sum</summary><p>body</p></details>').trim()).toBe('Sum');
+    expect(toMarkdown('<details open><summary>Sum</summary><p>body</p></details>').trim())
+      .toContain('body');
+  });
+});
+
 // The section that is not hidden, only not shown yet. A reveal-on-scroll library
 // puts `opacity: 0` on half an article and fades each part in as it arrives, and
 // dropping those would take the second half of every such page out of a

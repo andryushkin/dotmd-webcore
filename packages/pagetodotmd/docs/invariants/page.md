@@ -197,6 +197,16 @@ of a pair whose other end is in that sheet.
   finds nothing and the whole box goes, visible text and all. Both are written
   where the state *changes*, so a revealed subtree costs one mark rather than one
   per element, and a page with no hidden boxes costs nothing.
+- `content-visibility: hidden` is a third stop on the way down, beside `display: none` and a clipped
+  box, and it is one only this side can reach: a page states it in a class, and the box carrying it
+  computes an ordinary `display: block`, `visibility: visible`, `opacity: 1` — every property the
+  core reads says the element is on the screen while nothing inside it is drawn. The walk stops
+  there for the same reason it stops at `display: none`: no descendant can take it back. The verdict
+  is `contentSkippedFrom()` in the converter, asked of the computed style here and of the recorded
+  attribute there. Neither of Chrome's own two uses of the value reaches this: a closed `<details>`
+  carries it on `::details-content`, which is not an element and has no computed style of its own to
+  walk into, and `hidden="until-found"` is removed by the attribute in the core. So the mark can
+  neither fold a `<details>` a consumer opened on its clone nor keep one it did not.
 - A background is the one thing here that cannot be read off an element at all: `background-color`
   does not inherit, so a computed style answers `rgba(0, 0, 0, 0)` over almost the whole of a page
   and says nothing about what is painted *behind* the element. The walk carries the nearest painted

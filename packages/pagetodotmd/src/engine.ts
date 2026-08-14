@@ -43,6 +43,7 @@ export {
   REVEAL_PROPERTIES,
   LINE_ITEM_TAGS,
   alignFrom,
+  contentSkippedFrom,
   displayFrom,
   invisibleFrom,
   italicFrom,
