@@ -46,6 +46,7 @@ export {
   // the recorded attribute here. Both sides must answer the same, which is what
   // makes them one implementation rather than two.
   alignFrom,
+  contentSkippedFrom,
   displayFrom,
   invisibleFrom,
   italicFrom,

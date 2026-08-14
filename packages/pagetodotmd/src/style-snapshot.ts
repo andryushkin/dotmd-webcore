@@ -59,6 +59,7 @@ import {
   ONE_LINE_MARK,
   REVEAL_PROPERTIES,
   alignFrom,
+  contentSkippedFrom,
   displayFrom,
   inlineStyle,
   invisibleFrom,
@@ -125,6 +126,7 @@ const ROW_MARK = '1';
  */
 const DIAGNOSTIC_PROPERTIES = [
   'display',
+  'content-visibility',
   'visibility',
   'opacity',
   'position',
@@ -678,6 +680,21 @@ export function snapshotStyles(
     // than mark a whole hidden menu one element at a time.
     if (firstWord(display) === 'none') {
       record(el, ['display:none']);
+      return false;
+    }
+    // Contents skipped. The box is drawn and everything in it is not, and no
+    // descendant can take that back — the same stop as `display:none`, and the
+    // one hiding a page states in a property the core would never see: it is a
+    // class or a rule, never an inline `style`, and the box it sits on computes
+    // an ordinary visible `display: block` with `visibility: visible` and
+    // `opacity: 1`. A tab panel behind an inactive tab, a slide off the
+    // carousel. Not the two shapes Chrome writes the value for itself: a closed
+    // `<details>` carries it on `::details-content`, which is a pseudo-element
+    // no `getComputedStyle` of an element reports, and `hidden="until-found"`
+    // is answered by the attribute in the core before a style is read — which
+    // is why a mark here can neither open a folded `<details>` nor close one.
+    if (contentSkippedFrom(read)) {
+      record(el, ['content-visibility:hidden']);
       return false;
     }
     if (visuallyHiddenFrom(read)) {
