@@ -93,26 +93,48 @@ export function buildHeadingFragmentMap(
 ): Map<string, string> {
   const map = new Map<string, string>();
   // Consumed as they match, so two "Intro" targets take intro and intro-1.
-  const remaining: RenderedHeading[] = headings.slice();
+  // Each heading's slug is minted exactly once, up front: the drift fallback
+  // below compares slugs across every unconsumed heading per unmatched target,
+  // and on a fragment-dense page recomputing three Unicode expressions inside
+  // that scan is where the time went. Plain-text matches take a queue per text
+  // instead of a scan; document order is the array order either way.
+  type Entry = { heading: RenderedHeading; slug: string; consumed: boolean };
+  const entries: Entry[] = headings.map((heading) => ({
+    heading,
+    slug: headingSlug(heading.text),
+    consumed: false,
+  }));
+  const byText = new Map<string, Entry[]>();
+  for (const entry of entries) {
+    const queue = byText.get(entry.heading.text);
+    if (queue) queue.push(entry);
+    else byText.set(entry.heading.text, [entry]);
+  }
 
   for (const target of fragmentIds) {
     if (target.headingText === undefined) continue;
     const text = target.headingText;
-    let idx = remaining.findIndex((h) => h.text === text);
-    if (idx < 0) {
+    let match: Entry | undefined;
+    const queue = byText.get(text);
+    if (queue) {
+      while (queue.length > 0 && queue[0]!.consumed) queue.shift();
+      match = queue[0];
+    }
+    if (!match) {
       const base = headingSlug(text);
       if (base !== '') {
         // The base the renderer would have minted before uniquifying, which is
         // also what an already-uniquified id starts with.
-        idx = remaining.findIndex(
-          (h) => headingSlug(h.text) === base || h.id === base || h.id.startsWith(`${base}-`),
+        match = entries.find(
+          (e) =>
+            !e.consumed &&
+            (e.slug === base || e.heading.id === base || e.heading.id.startsWith(`${base}-`)),
         );
       }
     }
-    if (idx < 0) continue;
-    const matched = remaining[idx]!;
-    remaining.splice(idx, 1);
-    map.set(target.id, matched.id);
+    if (!match) continue;
+    match.consumed = true;
+    map.set(target.id, match.heading.id);
   }
 
   return map;
