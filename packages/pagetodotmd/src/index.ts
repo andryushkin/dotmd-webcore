@@ -14,6 +14,7 @@
 export {
   captureNamespace,
   canonicalize,
+  registerOwnUI,
   DEFAULT_NAMESPACE,
   DEFAULT_PREFIX,
   type CaptureNamespace,

@@ -77,6 +77,17 @@ of a pair whose other end is in that sheet.
 - The prefix belongs to a consumer, the object to a capture. A consumer's own-UI
   mark goes on when it draws its bubble, minutes before any capture exists, so a
   name minted per session could never have been on it.
+- **`registerOwnUI(el, namespace)` is the write half of `dropOwnUI`**, and both
+  live here for that reason: a consumer holding one of them and the package the
+  other is a pair with a boundary between it. The register is a *mark*, never a
+  set of nodes — `cloneContents()` keeps no link back to the originals, so live
+  nodes could not be matched against a fragment at all, and a set would hold
+  every toast a session ever drew. A list of selectors is the arrangement this
+  replaces: it names the two elements somebody remembered, and the clipper
+  shipped `add to .md` at the end of every full-page capture until the elements
+  said so themselves. The namespace argument is the sharp part — a bubble
+  registered under one consumer's names is invisible to a capture walking
+  another's, and nothing fails; the paint simply arrives in the file.
 - `style` and `row` are **imported** from `htmltodotmd/snapshot`, never spelled
   again. `ROW_ATTR` was written out a second time in the content script under a
   comment saying the two sides could not disagree: its value crossed the boundary
