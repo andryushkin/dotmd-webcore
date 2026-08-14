@@ -42,9 +42,16 @@ function readCss(name: string): string {
  * A small stack walk rather than a block regex, for two reasons the stylesheets
  * already exercise: rules nest under `@media` and `@layer`, and a string value
  * may hold a brace (`content: "}"`) that a `[^}]*` would trip on. Quotes are
- * skipped as units; at-rule preludes are pushed like selectors and discarded
- * when their frame closes with no declarations of its own. CSS nesting inside a
- * declaration block is not handled — nothing here writes it.
+ * skipped as units; a statement at-rule (`@layer a, b;`, `@import …;`) is
+ * dropped at its semicolon so the selector after it starts clean; grouping
+ * at-rule preludes are pushed like selectors and discarded when their frame
+ * closes with no declarations of its own.
+ *
+ * CSS nesting is refused rather than not handled: a block popped while a
+ * *style rule* still sits on the stack is a rule nested inside a declaration
+ * block, this walk cannot attribute its declarations, and a guard that goes
+ * silently blind on valid CSS is the defect the second review draft had. The
+ * throw turns the whole suite red, which is the fail-closed answer.
  */
 function declarationBlocks(css: string): Array<{ selector: string; body: string }> {
   const out: Array<{ selector: string; body: string }> = [];
@@ -68,6 +75,13 @@ function declarationBlocks(css: string): Array<{ selector: string; body: string 
       if (i < css.length) buf += css[i]!;
       continue;
     }
+    if (ch === ';' && buf.trimStart().startsWith('@')) {
+      // `@layer dotmd.theme;` and its kin end here, not at a brace. Kept in
+      // buf, it used to glue itself onto the next selector, whose block then
+      // read as an at-rule and was discarded — declarations and all.
+      buf = '';
+      continue;
+    }
     if (ch === '{') {
       stack.push(buf.trim());
       buf = '';
@@ -76,8 +90,15 @@ function declarationBlocks(css: string): Array<{ selector: string; body: string 
     if (ch === '}') {
       const selector = stack.pop();
       const body = buf.trim();
-      if (selector !== undefined && selector !== '' && body !== '' && !selector.startsWith('@')) {
-        out.push({ selector, body });
+      if (selector !== undefined && selector !== '' && body !== '') {
+        if (stack.some((outer) => !outer.startsWith('@'))) {
+          throw new Error(
+            `CSS nesting under a style rule is not supported by this scanner: "${selector}" inside "${stack.join(' > ')}"`,
+          );
+        }
+        if (!selector.startsWith('@')) {
+          out.push({ selector, body });
+        }
       }
       buf = '';
       continue;
@@ -88,18 +109,42 @@ function declarationBlocks(css: string): Array<{ selector: string; body: string 
 }
 
 /**
+ * Splits on the given separator only at bracket depth zero, so a comma inside
+ * `:is(…)` and a space inside `[data-label="a b"]` do not shear a selector.
+ * Quoted content never reaches here with structure the depth count would
+ * misread: attribute strings hold no brackets in these files.
+ */
+function splitTop(text: string, isSeparator: (ch: string) => boolean): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of text) {
+    if (ch === '(' || ch === '[') depth += 1;
+    else if (ch === ')' || ch === ']') depth -= 1;
+    if (depth === 0 && isSeparator(ch)) {
+      if (current.trim() !== '') parts.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim() !== '') parts.push(current.trim());
+  return parts;
+}
+
+/**
  * Whether any selector in the list styles the document root itself.
  *
  * The subject is the rightmost compound: `.dotmd-doc`, with or without
- * attribute selectors and pseudo-classes, reached directly or through a
- * descendant prefix (`:root[…] .dotmd-doc`). A pseudo-element
+ * attribute selectors and pseudo-classes (arguments included, so
+ * `.dotmd-doc:is([data-a], [data-b])` is the root too), reached directly or
+ * through a descendant prefix (`:root[…] .dotmd-doc`). A pseudo-element
  * (`.dotmd-doc::before`) is not the root — its declarations land on a box of
- * their own. A comma inside `:is(…)` splits the list wrong, harmlessly: the
- * fragments it produces match nothing.
+ * their own.
  */
 function targetsRoot(selectorList: string): boolean {
-  return selectorList.split(',').some((selector) => {
-    const compounds = selector.trim().split(/[\s>+~]+/);
+  return splitTop(selectorList, (ch) => ch === ',').some((selector) => {
+    const compounds = splitTop(selector, (ch) => /[\s>+~]/.test(ch));
     const subject = compounds[compounds.length - 1] ?? '';
     return /^\.dotmd-doc(\[[^\]]*\]|:[a-z-]+(\([^)]*\))?)*$/.test(subject);
   });
@@ -113,7 +158,11 @@ function rootBodies(css: string): string[] {
 }
 
 function propertiesOf(body: string): string[] {
-  return [...body.matchAll(/(?:^|;)\s*([a-z][a-z-]*)\s*:/g)].map((m) => m[1]!);
+  // Strings are blanked first: a custom property may legally hold
+  // `"; line-height: 2"` as its value, and a property name fished out of a
+  // string would fail the suite on innocent CSS.
+  const noStrings = body.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
+  return [...noStrings.matchAll(/(?:^|;)\s*([a-z][a-z-]*)\s*:/g)].map((m) => m[1]!);
 }
 
 const base = readCss('base.css');
@@ -194,5 +243,35 @@ describe('the scanner the contract stands on', () => {
     // The field case, verbatim: a bare declaration in the plain root block.
     const css = '@layer dotmd.theme { .dotmd-doc { --dotmd-radius: 2px; line-height: 1.7; } }';
     expect(bypassedIn(css)).toEqual(['line-height']);
+  });
+
+  // The second review round: four valid spellings the first scanner let
+  // through silently, and one it would have flagged on innocent CSS.
+  test('a statement at-rule does not glue itself onto the next selector', () => {
+    const css = '@layer dotmd.theme; .dotmd-doc { line-height: 2; }';
+    expect(bypassedIn(css)).toEqual(['line-height']);
+  });
+
+  test('a comma inside :is() does not shear the subject', () => {
+    const css = '.dotmd-doc:is([data-a], [data-b]) { line-height: 2; }';
+    expect(bypassedIn(css)).toEqual(['line-height']);
+  });
+
+  test('a space inside an attribute string does not shear the subject', () => {
+    const css = '.dotmd-doc[data-label="a b"] { line-height: 2; }';
+    expect(bypassedIn(css)).toEqual(['line-height']);
+  });
+
+  test('CSS nesting fails the suite instead of hiding a violation', () => {
+    // The scanner cannot attribute nested declarations; refusing loudly is the
+    // fail-closed answer — a theme that adopts nesting must first teach the
+    // guard to read it.
+    const css = '.dotmd-doc { @media (width > 1px) { line-height: 2; } }';
+    expect(() => bypassedIn(css)).toThrow('CSS nesting');
+  });
+
+  test('a property name inside a string value is not a declaration', () => {
+    const css = '.dotmd-doc { --example: "; line-height: 2"; }';
+    expect(bypassedIn(css)).toEqual([]);
   });
 });
