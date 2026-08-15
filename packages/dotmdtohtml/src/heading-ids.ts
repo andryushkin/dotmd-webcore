@@ -22,6 +22,9 @@ export interface RenderedHeading {
    * LaTeX (without the dollars), never the placeholder that carries it through
    * the sanitizer. That placeholder is empty and would otherwise erase the
    * formula from both the id and the list a caller builds a TOC from.
+   * Characters, not entities: the escaping `marked` applies to leaf tokens on
+   * their way to HTML is folded back, so an apostrophe is `'` here, never
+   * `&#39;`.
    */
   readonly text: string;
   /** The `id` attribute written on the tag — unique within this render. */
@@ -46,6 +49,28 @@ interface WalkToken {
 const EMPTY_HEADING_BASE = 'heading';
 
 /**
+ * Undo the HTML escaping `marked` bakes into a leaf token's `text`.
+ *
+ * The lexer hands `text`, `escape`, `codespan` and image-alt text already
+ * escaped for its own HTML renderer: an apostrophe arrives as `&#39;`, an
+ * ampersand as `&amp;`. This list is plain text for a reader and for a
+ * consumer matching a live page by text — either one sees the entity, not the
+ * character, and a TOC prints "What&#39;s new" verbatim.
+ *
+ * Exactly the five entities `marked` writes are reversed, `&amp;` last: a
+ * source that itself spelled `&amp;#39;` reads on screen as `&#39;`, and
+ * reversing `&amp;` first would collapse it twice, into `'`.
+ */
+function unescapeMarked(text: string): string {
+  return text
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+/**
  * Plain text of a heading's inline tokens.
  *
  * `marked`'s own third argument to the heading renderer is *almost* this, built
@@ -61,7 +86,7 @@ export function headingPlainText(tokens: readonly WalkToken[] | undefined, run: 
       case 'text':
       case 'escape':
       case 'codespan':
-        out += token.text ?? '';
+        out += unescapeMarked(token.text ?? '');
         break;
       case 'math':
       case 'mathBlock': {
@@ -82,7 +107,7 @@ export function headingPlainText(tokens: readonly WalkToken[] | undefined, run: 
         break;
       case 'image':
         // Alt text is what a reader without the image is given.
-        out += token.text ?? '';
+        out += unescapeMarked(token.text ?? '');
         break;
       case 'html':
         // Raw HTML in a heading is rare and untrusted; nothing of it is text.
