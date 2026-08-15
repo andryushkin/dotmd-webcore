@@ -217,6 +217,44 @@ describe('headingIds on', () => {
     expect(html).toContain('<em>hard</em>');
   });
 
+  // `marked` escapes leaf-token text for its own HTML renderer while lexing:
+  // an apostrophe is already `&#39;` inside the token. The list is plain text
+  // for a reader — a TOC that prints the entity verbatim is the defect this
+  // block pins shut, across every leaf kind that arrives escaped.
+  test('an apostrophe reaches the list as a character, not as an entity', () => {
+    const { headings } = renderer({ headingIds: true }).render("# What's new");
+    expect(headings).toEqual([{ level: 1, text: "What's new", id: 'what-s-new' }]);
+  });
+
+  test('ampersands, quotes and angle brackets stay characters too', () => {
+    const { headings } = renderer({ headingIds: true }).render(
+      '## Ben & Jerry "quoted" 1 < 2',
+    );
+    expect(headings[0]!.text).toBe('Ben & Jerry "quoted" 1 < 2');
+    expect(headings[0]!.id).toBe('ben-jerry-quoted-1-2');
+  });
+
+  test('escapes, code spans and image alt text unescape like plain runs', () => {
+    const { headings } = renderer({ headingIds: true }).render(
+      "# a \\& b\n\n## the `it's` span\n\n### ![alt & text](x.png)",
+    );
+    expect(headings.map((h) => h.text)).toEqual([
+      'a & b',
+      "the it's span",
+      'alt & text',
+    ]);
+  });
+
+  // What the author wrote as an entity is read back as its on-screen character;
+  // a double-escaped one collapses exactly once. `&amp;` is reversed last for
+  // precisely this pair: the other order would turn `&amp;#39;` into `'`.
+  test('author-written entities match what the reader sees on screen', () => {
+    const { headings } = renderer({ headingIds: true }).render(
+      '# What&#39;s new\n\n## a &amp;#39; b',
+    );
+    expect(headings.map((h) => h.text)).toEqual(["What's new", 'a &#39; b']);
+  });
+
   test('a link in a heading contributes its label, not its URL', () => {
     const { headings } = renderer({ headingIds: true }).render(
       '## See [the docs](https://example.com/path) now',
