@@ -27,7 +27,7 @@ the level of a package, and two of the three have none.
 The dependency between them goes through **public subpath exports only**
 (`htmltodotmd`, `/selection`, `/snapshot`), and `pagetodotmd/src/engine.ts` is the
 only file allowed to name them. Consumers are Chrome extensions that vendor this
-repository as a git submodule and import both **straight from source**, with no
+repository as a git submodule and import all three **straight from source**, with no
 build step in between; the `tsup` builds here serve a publication that has not
 happened yet.
 
@@ -57,8 +57,8 @@ in full; `docs/CHROME_EXTENSION.md` beside it is the integration guide;
 ## Build and test
 
 ```bash
-bun install        # once, from this directory: a workspace of two packages
-bun test           # both suites
+bun install        # once, from this directory: a workspace of three packages
+bun test           # all three suites
 bun run tsc        # per package; bun checks no types, and each config is
                    # stricter than a consumer's
 bun run lint       # ESLint
@@ -121,7 +121,7 @@ exactly why it can drift silently.
 - **A name crossing between the packages ⇄ `pagetodotmd/src/engine.ts` ⇄
   `BOUNDARY` in its `tsup.config.ts`.** One file lists what crosses, one map turns
   those paths into package specifiers when publishing, and
-  `scripts/publish-paths.ts` refuses to finish if a path reached `dist/` without
+  `pagetodotmd/scripts/publish-paths.ts` refuses to finish if a path reached `dist/` without
   an entry — the only thing that would notice.
 - **A subpath in `exports` ⇄ an entry in `tsup.config.ts` ⇄ the pack check.** Two
   halves of one declaration: a name in `exports` alone resolves to a file the
