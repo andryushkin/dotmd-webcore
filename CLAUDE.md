@@ -150,7 +150,8 @@ exactly why it can drift silently.
 - The repository is public. Anything a stranger should not read goes to
   `DOTMD.md`, which is gitignored, and never into a commit message: those are not
   cleaned up by editing a file.
-- Commit messages: `feat`, `fix`, `refactor`, `docs`, `chore`. Commit straight to
-  `main`; do not push unless asked.
+- Commit messages: `feat`, `fix`, `refactor`, `docs`, `chore`. Work goes on a
+  branch and lands on `main` through a PR — `scripts/sync-into-consumer.sh`
+  refuses a local `main` ahead of `origin`. Do not push or open the PR unless asked.
 - Check `git status --short` before you start and leave what was already dirty out
   of your commit.
