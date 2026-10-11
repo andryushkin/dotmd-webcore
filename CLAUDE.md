@@ -69,6 +69,14 @@ bun run build      # tsup → dist/, per package, used only to publish
 reads, what a selection leaves behind — is verified in the consumer, against a
 live page.
 
+**Verifying your work.** `bun test && bun run tsc && bun run lint` — healthy
+shows ` 0 fail` and `Exited with code 0` for every package.
+
+- Run it before reporting work as done, and paste the output.
+- A failing test is fixed in the code — never skip, delete or loosen the test.
+- A bug: first a test that fails for the expected reason, committed; then the
+  fix, without editing that test.
+
 ## What lives where
 
 A conversion defect belongs in `htmltodotmd`, with a test beside it, never
