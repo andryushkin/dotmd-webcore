@@ -27,7 +27,7 @@ the level of a package, and two of the three have none.
 The dependency between them goes through **public subpath exports only**
 (`htmltodotmd`, `/selection`, `/snapshot`), and `pagetodotmd/src/engine.ts` is the
 only file allowed to name them. Consumers are Chrome extensions that vendor this
-repository as a git submodule and import both **straight from source**, with no
+repository as a git submodule and import all three **straight from source**, with no
 build step in between; the `tsup` builds here serve a publication that has not
 happened yet.
 
@@ -57,8 +57,8 @@ in full; `docs/CHROME_EXTENSION.md` beside it is the integration guide;
 ## Build and test
 
 ```bash
-bun install        # once, from this directory: a workspace of two packages
-bun test           # both suites
+bun install        # once, from this directory: a workspace of three packages
+bun test           # all three suites
 bun run tsc        # per package; bun checks no types, and each config is
                    # stricter than a consumer's
 bun run lint       # ESLint
@@ -68,6 +68,14 @@ bun run build      # tsup → dist/, per package, used only to publish
 `bun test` cannot see a browser. Everything that needs one — how a page's own CSS
 reads, what a selection leaves behind — is verified in the consumer, against a
 live page.
+
+**Verifying your work.** `bun test && bun run tsc && bun run lint` — healthy
+shows ` 0 fail` and `Exited with code 0` for every package.
+
+- Run it before reporting work as done, and paste the output.
+- A failing test is fixed in the code — never skip, delete or loosen the test.
+- A bug: first a test that fails for the expected reason, committed; then the
+  fix, without editing that test.
 
 ## What lives where
 
@@ -121,7 +129,7 @@ exactly why it can drift silently.
 - **A name crossing between the packages ⇄ `pagetodotmd/src/engine.ts` ⇄
   `BOUNDARY` in its `tsup.config.ts`.** One file lists what crosses, one map turns
   those paths into package specifiers when publishing, and
-  `scripts/publish-paths.ts` refuses to finish if a path reached `dist/` without
+  `pagetodotmd/scripts/publish-paths.ts` refuses to finish if a path reached `dist/` without
   an entry — the only thing that would notice.
 - **A subpath in `exports` ⇄ an entry in `tsup.config.ts` ⇄ the pack check.** Two
   halves of one declaration: a name in `exports` alone resolves to a file the
@@ -150,7 +158,8 @@ exactly why it can drift silently.
 - The repository is public. Anything a stranger should not read goes to
   `DOTMD.md`, which is gitignored, and never into a commit message: those are not
   cleaned up by editing a file.
-- Commit messages: `feat`, `fix`, `refactor`, `docs`, `chore`. Commit straight to
-  `main`; do not push unless asked.
+- Commit messages: `feat`, `fix`, `refactor`, `docs`, `chore`. Work goes on a
+  branch and lands on `main` through a PR — `scripts/sync-into-consumer.sh`
+  refuses a local `main` ahead of `origin`. Do not push or open the PR unless asked.
 - Check `git status --short` before you start and leave what was already dirty out
   of your commit.
